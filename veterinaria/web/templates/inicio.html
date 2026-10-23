@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% from "_macros.html" import kpi, estado, vacio %}
+{% set activo = "inicio.tablero" %}
+{% block titulo %}Inicio{% endblock %}
+{% block subtitulo %}Resumen de la red de clínicas y del circuito de muestras{% endblock %}
+{% block acciones %}
+  <a href="{{ url_for('atencion.atencion') }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Nueva atención</a>
+{% endblock %}
+{% block contenido %}
+<div class="row g-3 mb-4">
+  <div class="col-sm-6 col-xl-3">{{ kpi("clipboard2-pulse", "Atenciones (30 días)", r.atenciones_30|num, "primary", (r.atenciones_hoy|string) ~ " hoy") }}</div>
+  <div class="col-sm-6 col-xl-3">{{ kpi("droplet-half", "Muestras en circuito", r.en_circuito|num, "info", "de la extracción al resultado") }}</div>
+  <div class="col-sm-6 col-xl-3">{{ kpi("shield-exclamation", "Rechazo en recepción (30 días)", (r.tasa_rechazo|num) ~ " %", "danger", (r.rechazadas_30|string) ~ " muestras rechazadas") }}</div>
+  <div class="col-sm-6 col-xl-3">{{ kpi("cash-coin", "Facturación del mes", r.facturacion_mes|moneda, "success") }}</div>
+</div>
+
+<div class="card mb-4">
+  <div class="card-header"><i class="bi bi-diagram-3"></i>Circuito de muestras</div>
+  <div class="card-body">
+    {% set etapas = [
+      ("EXTRAIDA", "Por empaquetar", url_for('logistica.empaquetado')),
+      ("EMPAQUETADA", "Por despachar", url_for('logistica.remitos', estado='EMITIDO')),
+      ("EN_TRANSITO", "En tránsito", url_for('logistica.remitos', estado='EN_TRANSITO')),
+      ("RECIBIDA", "Por analizar", url_for('laboratorio.resultados')),
+      ("ANALIZADA", "Analizadas", url_for('laboratorio.resultados', filtro='analizadas')),
+      ("RECHAZADA", "Rechazadas", url_for('laboratorio.resultados', filtro='rechazadas')),
+    ] %}
+    <div class="circuito">
+      {% for clave, texto, url in etapas %}
+        <a class="etapa" href="{{ url }}">
+          <div class="d-flex justify-content-between align-items-start">
+            <div class="numero">{{ r.por_estado.get(clave, 0)|num }}</div>
+            {{ estado(clave) }}
+          </div>
+          <div class="small text-body-secondary">{{ texto }}</div>
+        </a>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-7">
+    <div class="card h-100">
+      <div class="card-header d-flex"><span><i class="bi bi-calendar3"></i>Turnos de hoy</span>
+        <a class="ms-auto small" href="{{ url_for('atencion.agenda') }}">Ver agenda</a></div>
+      {% if r.turnos_hoy %}
+      <div class="table-responsive"><table class="table table-hover">
+        <thead><tr><th>Hora</th><th>Paciente</th><th>Veterinario</th><th>Motivo</th><th>Estado</th></tr></thead>
+        <tbody>
+        {% for t in r.turnos_hoy %}
+          <tr><td class="fw-semibold">{{ t.inicio[11:] }}</td><td>{{ t.mascota }}</td><td>{{ t.veterinario }}</td>
+              <td>{{ t.motivo }}</td><td>{{ estado(t.estado) }}</td></tr>
+        {% endfor %}
+        </tbody></table></div>
+      {% else %}{{ vacio("No hay turnos para hoy.", "calendar-x") }}{% endif %}
+    </div>
+  </div>
+  <div class="col-lg-5">
+    <div class="card h-100">
+      <div class="card-header d-flex"><span><i class="bi bi-bell"></i>Avisos pendientes de envío</span>
+        <a class="ms-auto small" href="{{ url_for('facturacion.avisos') }}">Ver todos</a></div>
+      <ul class="list-group list-group-flush">
+        {% for a in r.avisos %}
+          <li class="list-group-item">
+            <div class="d-flex justify-content-between small text-body-secondary"><span>{{ a.mascota or "" }}</span><span>{{ a.fecha_hora|fh }}</span></div>
+            <div class="small">{{ a.mensaje }}</div>
+          </li>
+        {% else %}
+          <li class="list-group-item">{{ vacio("Sin avisos pendientes.", "bell-slash") }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+</div>
+{% endblock %}

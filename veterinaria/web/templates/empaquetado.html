@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% from "_macros.html" import campo, estado, vacio %}
+{% set activo = "logistica.empaquetado" %}
+{% block titulo %}Empaquetado de muestras{% endblock %}
+{% block subtitulo %}Proceso 4 · Conservadora isotérmica, remito biológico y precinto sanitario{% endblock %}
+{% block contenido %}
+<ul class="nav nav-pills mb-3 gap-1">
+  {% for c in clinicas %}
+    <li class="nav-item"><a class="nav-link {% if c.id == clinica_id %}active{% endif %}" href="{{ url_for('logistica.empaquetado', clinica=c.id) }}">
+      {{ c.nombre }} <span class="badge {{ 'text-bg-light' if c.id == clinica_id else 'text-bg-secondary' }} ms-1">{{ pendientes[c.id] }}</span></a></li>
+  {% endfor %}
+</ul>
+
+<form method="post" action="{{ url_for('logistica.empaquetar') }}">
+<input type="hidden" name="clinica" value="{{ clinica_id }}">
+<div class="row g-3">
+  <div class="col-xl-8">
+    <div class="card">
+      <div class="card-header d-flex align-items-center">
+        <span><i class="bi bi-droplet-half"></i>Muestras extraídas pendientes de envío</span>
+        <button class="btn btn-sm btn-outline-danger ms-auto" formaction="{{ url_for('logistica.descartar') }}" formnovalidate
+                onclick="return confirm('¿Descartar las muestras que superaron su tiempo de viabilidad?')">
+          <i class="bi bi-trash3"></i> Descartar vencidas</button>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover">
+          <thead><tr><th style="width: 36px"><input class="form-check-input" type="checkbox" onclick="document.querySelectorAll('input[name=muestras]').forEach(c => c.checked = this.checked)"></th>
+            <th>Muestra</th><th>Extracción</th><th>Paciente</th><th>Análisis</th><th>Conservación</th><th>Prioridad</th></tr></thead>
+          <tbody>
+          {% for m in muestras %}
+            <tr onclick="if (event.target.type !== 'checkbox') { const c = this.querySelector('input'); c.checked = !c.checked; }" style="cursor: pointer">
+              <td><input class="form-check-input" type="checkbox" name="muestras" value="{{ m.id }}" {% if m.id in marcadas %}checked{% endif %}></td>
+              <td class="fw-semibold">{{ m.codigo }}</td><td class="small">{{ m.fecha_extraccion|fh }}</td><td>{{ m.mascota }}</td>
+              <td>{{ m.analisis }}<div class="small text-body-secondary">{{ m.tipo_muestra }}</div></td>
+              <td class="text-nowrap"><i class="bi bi-thermometer-half text-info"></i> {{ m.temp_min|num }} a {{ m.temp_max|num }} °C</td>
+              <td>{{ estado(m.prioridad) }}</td>
+            </tr>
+          {% else %}<tr><td colspan="7">{{ vacio("No hay muestras pendientes de envío en esta clínica.", "check2-circle") }}</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-xl-4">
+    <div class="card">
+      <div class="card-header"><i class="bi bi-box-seam"></i>Armar envío</div>
+      <div class="card-body row g-3">
+        <div class="col-12">
+          <label class="form-label">Conservadora disponible <span class="text-danger">*</span></label>
+          {% for ct in contenedores %}
+            <label class="d-flex gap-2 align-items-center border rounded p-2 mb-2">
+              <input class="form-check-input" type="radio" name="contenedor_id" value="{{ ct.id }}"
+                     {% if datos.get('contenedor_id')|string == ct.id|string %}checked{% endif %}>
+              <span class="flex-grow-1"><span class="fw-semibold">{{ ct.codigo }}</span>
+                <span class="d-block small text-body-secondary">{{ ct.descripcion }}</span></span>
+              <span class="small text-nowrap text-end">{{ ct.temp_min|num }} a {{ ct.temp_max|num }} °C<br>
+                <span class="text-body-secondary">hasta {{ ct.capacidad }} muestras</span></span>
+            </label>
+          {% else %}
+            <div class="alert alert-warning small mb-0">No hay conservadoras disponibles en esta clínica: todas están en viaje.</div>
+          {% endfor %}
+        </div>
+        {{ campo("responsable", "Responsable del empaquetado", datos, col="col-12", requerido=true) }}
+        {{ campo("fecha_hora", "Fecha y hora", {"fecha_hora": datos.get("fecha_hora", "")|input_fh}, tipo="datetime-local", col="col-12", requerido=true) }}
+        <div class="col-12">
+          <div class="small text-body-secondary mb-2"><i class="bi bi-info-circle"></i> Se emitirá un remito biológico y se colocará un precinto sanitario numerado.</div>
+          <button class="btn btn-primary w-100"><i class="bi bi-box-seam"></i> Empaquetar y emitir remito</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</form>
+{% endblock %}

@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% from "_macros.html" import campo, vacio, boton_post %}
+{% set activo = "clientes.listar" %}
+{% block titulo %}Clientes{% endblock %}
+{% block subtitulo %}Proceso 1 · Responsables de las mascotas{% endblock %}
+{% block contenido %}
+<div class="row g-3">
+  <div class="col-xl-8">
+    <div class="card">
+      <div class="card-header d-flex align-items-center gap-2">
+        <span><i class="bi bi-people"></i>Clientes activos <span class="badge text-bg-light">{{ clientes|length }}</span></span>
+        <form class="ms-auto" method="get">
+          <div class="input-group input-group-sm">
+            <span class="input-group-text"><i class="bi bi-search"></i></span>
+            <input class="form-control" name="q" value="{{ q }}" placeholder="DNI, nombre o apellido">
+          </div>
+        </form>
+      </div>
+      <div class="table-responsive tabla-scroll">
+        <table class="table table-hover">
+          <thead><tr><th>DNI</th><th>Apellido y nombre</th><th>Teléfono</th><th>Email</th><th class="text-center">Mascotas</th><th></th></tr></thead>
+          <tbody>
+          {% for c in clientes %}
+            <tr data-href="{{ url_for('clientes.listar', editar=c.id) }}" {% if c.id == cliente_id %}class="table-primary"{% endif %}>
+              <td>{{ c.dni }}</td><td class="fw-semibold">{{ c.apellido }}, {{ c.nombre }}</td>
+              <td>{{ c.telefono }}</td><td>{{ c.email }}</td>
+              <td class="text-center"><a href="{{ url_for('clientes.mascotas', q=c.dni) }}" class="badge text-bg-light text-decoration-none">{{ c.mascotas }}</a></td>
+              <td class="text-end"><a class="btn btn-sm btn-light" href="{{ url_for('clientes.listar', editar=c.id) }}"><i class="bi bi-pencil"></i></a></td>
+            </tr>
+          {% else %}<tr><td colspan="6">{{ vacio("No se encontraron clientes.") }}</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-xl-4">
+    <div class="card">
+      <div class="card-header"><i class="bi bi-person-{{ 'gear' if cliente_id else 'plus' }}"></i>{{ "Editar cliente" if cliente_id else "Nuevo cliente" }}</div>
+      <div class="card-body">
+        <form method="post" action="{{ url_for('clientes.modificar', cliente_id=cliente_id) if cliente_id else url_for('clientes.guardar') }}" class="row g-3">
+          {{ campo("dni", "DNI", datos, col="col-12", requerido=true, ayuda="7 u 8 dígitos, sin puntos") }}
+          {{ campo("nombre", "Nombre", datos, requerido=true) }}
+          {{ campo("apellido", "Apellido", datos, requerido=true) }}
+          {{ campo("telefono", "Teléfono", datos) }}
+          {{ campo("email", "Email", datos, tipo="email") }}
+          {{ campo("direccion", "Dirección", datos, col="col-12") }}
+          <div class="col-12 d-flex gap-2">
+            <button class="btn btn-primary"><i class="bi bi-check-lg"></i> Guardar</button>
+            {% if cliente_id %}<a href="{{ url_for('clientes.listar') }}" class="btn btn-light">Cancelar</a>{% endif %}
+          </div>
+        </form>
+        {% if cliente_id %}
+          <hr>
+          <div class="d-flex gap-2">
+            <a class="btn btn-sm btn-outline-primary" href="{{ url_for('clientes.mascotas', cliente=cliente_id) }}"><i class="bi bi-plus"></i> Agregar mascota</a>
+            {{ boton_post(url_for('clientes.baja', cliente_id=cliente_id), "Dar de baja", icono="person-dash", confirmar="¿Dar de baja a este cliente?") }}
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

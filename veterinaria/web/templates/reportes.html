@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% from "_macros.html" import vacio %}
+{% set activo = "reportes.reportes" %}
+{% block titulo %}Reportes{% endblock %}
+{% block subtitulo %}Indicadores de atención, logística de muestras y facturación{% endblock %}
+{% block contenido %}
+<form method="get" class="card mb-3">
+  <div class="card-body row g-2 align-items-end">
+    <div class="col-lg-5">
+      <label class="form-label">Reporte</label>
+      <select class="form-select" name="reporte" onchange="this.form.submit()">
+        {% for r in reportes %}<option value="{{ r.__name__ }}" {% if r is sameas clase %}selected{% endif %}>{{ r.titulo }}</option>{% endfor %}
+      </select>
+    </div>
+    {% if clase.usa_rango_fechas %}
+      <div class="col-sm-4 col-lg-2"><label class="form-label">Desde</label><input type="date" class="form-control" name="desde" value="{{ desde }}"></div>
+      <div class="col-sm-4 col-lg-2"><label class="form-label">Hasta</label><input type="date" class="form-control" name="hasta" value="{{ hasta }}"></div>
+    {% else %}
+      <div class="col-lg-4 small text-body-secondary pb-2"><i class="bi bi-calendar-check"></i> Se calcula a la fecha de hoy.</div>
+    {% endif %}
+    <div class="col-sm-4 col-lg-3 d-flex gap-2">
+      <button class="btn btn-primary flex-fill"><i class="bi bi-arrow-repeat"></i> Generar</button>
+      <a class="btn btn-outline-secondary" href="{{ url_for('reportes.descargar_csv', **request.args) }}" data-bs-toggle="tooltip" title="Descargar CSV"><i class="bi bi-download"></i></a>
+    </div>
+  </div>
+  <div class="card-footer bg-transparent small text-body-secondary">{{ clase.descripcion }}</div>
+</form>
+
+{% if resultado %}
+<div class="row g-3 mb-3">
+  <div class="col-xl-{{ 5 if grafico else 12 }}">
+    <div class="card h-100">
+      <div class="card-header"><i class="bi bi-lightbulb"></i>Resumen</div>
+      <div class="card-body">
+        {% for linea in resultado.resumen %}
+          <p class="{{ 'mb-2' if not loop.last }} {{ 'fw-semibold' if loop.first }} {{ 'ps-3 small' if linea.startswith('  ') }}">{{ linea }}</p>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  {% if grafico %}
+  <div class="col-xl-7">
+    <div class="card h-100">
+      <div class="card-header"><i class="bi bi-bar-chart"></i>{{ grafico.titulo }}</div>
+      <div class="card-body"><div style="height: {{ [160, 40 + grafico.valores|length * 28]|max }}px"><canvas id="grafico"></canvas></div></div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<div class="card">
+  <div class="card-header"><i class="bi bi-table"></i>{{ resultado.titulo }} <span class="badge text-bg-light">{{ resultado.filas|length }} filas</span></div>
+  <div class="table-responsive tabla-scroll">
+    <table class="table table-hover table-sm">
+      <thead><tr>{% for _, titulo in resultado.columnas %}<th>{{ titulo }}</th>{% endfor %}</tr></thead>
+      <tbody>
+      {% for fila in resultado.filas %}
+        <tr>{% for clave, titulo in resultado.columnas %}
+          {% set v = fila.get(clave) %}
+          <td class="{{ 'text-end text-nowrap' if v is number else ('text-nowrap' if v|string|length < 28) }}">{{ (v|moneda if '$' in titulo else v|num) if v is number else (v if v is not none else "") }}</td>
+        {% endfor %}</tr>
+      {% else %}<tr><td colspan="{{ resultado.columnas|length }}">{{ vacio("No hay datos para el período elegido.", "bar-chart") }}</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if grafico %}
+<script src="{{ url_for('static', filename='vendor/chart.umd.min.js') }}"></script>
+<script>
+  new Chart(document.getElementById('grafico'), {
+    type: 'bar',
+    data: {
+      labels: {{ grafico.etiquetas|tojson }},
+      datasets: [{ label: {{ grafico.titulo|tojson }}, data: {{ grafico.valores|tojson }},
+                   backgroundColor: '#3fb8af', borderRadius: 4, maxBarThickness: 22 }]
+    },
+    options: {
+      indexAxis: 'y', maintainAspectRatio: false, animation: false,
+      plugins: { legend: { display: false },
+                 tooltip: { callbacks: { label: c => c.parsed.x.toLocaleString('es-AR') } } },
+      scales: { x: { beginAtZero: true, grid: { color: '#eef1f5' }, ticks: { callback: v => v.toLocaleString('es-AR') } },
+                y: { grid: { display: false } } }
+    }
+  });
+</script>
+{% endif %}
+{% endblock %}

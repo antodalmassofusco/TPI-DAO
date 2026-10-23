@@ -1,0 +1,88 @@
+:root {
+  --vr-lateral: #10263b;
+  --vr-lateral-hover: #1b3a57;
+  --vr-acento: #3fb8af;
+  --vr-fondo: #f3f5f9;
+  --bs-body-font-family: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+}
+
+body { background: var(--vr-fondo); }
+
+/* ---------- Barra lateral ---------- */
+.barra-lateral {
+  /* !important: en pantallas grandes .offcanvas-lg de Bootstrap fuerza un fondo transparente */
+  background: var(--vr-lateral) !important;
+  color: #c9d6e3;
+  width: 250px;
+}
+@media (min-width: 992px) {
+  .barra-lateral { position: fixed; inset: 0 auto 0 0; display: flex; flex-direction: column; }
+  .contenido { margin-left: 250px; }
+}
+.marca { display: flex; align-items: center; gap: .75rem; padding: 1.25rem 1.25rem 1rem; }
+.marca > .bi { font-size: 1.9rem; color: var(--vr-acento); }
+.marca-nombre { color: #fff; font-weight: 700; font-size: 1.25rem; line-height: 1.1; }
+.marca-sub { font-size: .75rem; color: #8aa2b8; }
+.menu { padding: .25rem .75rem 1.5rem; overflow-y: auto; }
+.menu-grupo { text-transform: uppercase; font-size: .7rem; letter-spacing: .08em; color: #6f8aa3; margin: 1.1rem .5rem .35rem; }
+.menu-item {
+  display: flex; align-items: center; gap: .65rem; padding: .5rem .75rem; border-radius: .5rem;
+  color: #c9d6e3; text-decoration: none; font-size: .925rem;
+}
+.menu-item:hover { background: var(--vr-lateral-hover); color: #fff; }
+.menu-item.activo { background: var(--vr-acento); color: #06282a; font-weight: 600; }
+
+/* ---------- Cabecera ---------- */
+.cabecera { display: flex; align-items: center; padding: 1.25rem 1.5rem 1rem; }
+@media (max-width: 991.98px) { .cabecera { padding: 1rem; } }
+
+/* ---------- Tarjetas y tablas ---------- */
+.card { border: 0; border-radius: .75rem; box-shadow: 0 1px 2px rgba(16, 38, 59, .06), 0 1px 8px rgba(16, 38, 59, .04); }
+.card-header { background: transparent; border-bottom: 1px solid #eef1f5; font-weight: 600; padding: .9rem 1.1rem; }
+.card-header .bi { color: var(--bs-primary); margin-right: .35rem; }
+.table { margin-bottom: 0; }
+.table > thead th {
+  font-size: .75rem; text-transform: uppercase; letter-spacing: .04em; color: #6b7a8c;
+  background: #f8fafc; border-bottom-width: 1px; white-space: nowrap;
+}
+.table td { vertical-align: middle; }
+tr[data-href] { cursor: pointer; }
+.tabla-scroll { max-height: 560px; overflow-y: auto; }
+.tabla-scroll thead th { position: sticky; top: 0; z-index: 1; }
+.estado { font-weight: 500; }
+.badge.text-bg-light { border: 1px solid #dde3ea; }
+.vacio { text-align: center; color: #8a97a8; padding: 2.5rem 1rem; }
+.vacio .bi { font-size: 2rem; display: block; margin-bottom: .35rem; }
+.form-label { font-size: .85rem; font-weight: 500; color: #44546a; margin-bottom: .25rem; }
+
+/* ---------- Indicadores ---------- */
+.kpi-icono { width: 48px; height: 48px; border-radius: .75rem; display: grid; place-items: center; font-size: 1.35rem; }
+.kpi-valor { font-size: 1.6rem; font-weight: 700; line-height: 1.15; }
+
+/* Circuito de muestras del panel de inicio */
+.circuito { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: .75rem; }
+.etapa {
+  position: relative; border-radius: .75rem; padding: .9rem 1rem; background: #fff; text-decoration: none; color: inherit;
+  border: 1px solid #e6ebf1; transition: border-color .15s, transform .15s;
+}
+.etapa:hover { border-color: var(--bs-primary); transform: translateY(-2px); }
+.etapa .numero { font-size: 1.75rem; font-weight: 700; }
+
+/* ---------- Línea de tiempo (trazabilidad, envíos) ---------- */
+.linea-tiempo { list-style: none; padding-left: 0; margin: 0; position: relative; }
+.linea-tiempo::before { content: ""; position: absolute; left: 15px; top: 6px; bottom: 6px; width: 2px; background: #e3e8ef; }
+.linea-tiempo li { position: relative; padding: 0 0 1.1rem 44px; }
+.linea-tiempo li:last-child { padding-bottom: 0; }
+.linea-tiempo .punto {
+  position: absolute; left: 4px; top: 0; width: 24px; height: 24px; border-radius: 50%;
+  display: grid; place-items: center; font-size: .75rem; color: #fff;
+}
+
+/* ---------- Comprobante imprimible ---------- */
+.comprobante { max-width: 760px; margin: 0 auto; }
+@media print {
+  .barra-lateral, .cabecera, .no-imprimir, .alert { display: none !important; }
+  .contenido { margin-left: 0 !important; }
+  body { background: #fff; }
+  .card { box-shadow: none; }
+}

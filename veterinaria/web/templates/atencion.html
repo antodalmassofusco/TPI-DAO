@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% from "_macros.html" import campo, selector, area, estado, vacio %}
+{% set activo = "atencion.atencion" %}
+{% block titulo %}Atención clínica{% endblock %}
+{% block subtitulo %}Proceso 3 · Registro de consultas, controles y urgencias{% endblock %}
+{% block contenido %}
+<div class="row g-3">
+  <div class="col-xl-7">
+    <div class="card">
+      <div class="card-header"><i class="bi bi-clipboard2-pulse"></i>Registrar atención</div>
+      <div class="card-body">
+        <form method="get" class="row g-2 mb-3 align-items-end">
+          <div class="col">
+            <label class="form-label">1. Paciente</label>
+            <select class="form-select" name="mascota" onchange="this.form.submit()">
+              <option value="">Seleccioná el paciente…</option>
+              {% for id, texto in mascotas %}<option value="{{ id }}" {% if id == mascota_id %}selected{% endif %}>{{ texto }}</option>{% endfor %}
+            </select>
+          </div>
+        </form>
+
+        {% if mascota %}
+          {% if pendientes %}
+            <div class="alert alert-warning d-flex gap-2 py-2">
+              <i class="bi bi-shield-exclamation"></i>
+              <div><strong>Esquema de vacunación incompleto:</strong>
+                {% for p in pendientes %}{{ p.tipo.nombre }} ({{ p.estado|lower }}){{ ", " if not loop.last }}{% endfor %}</div>
+            </div>
+          {% endif %}
+          <form method="post" action="{{ url_for('atencion.registrar') }}" class="row g-3">
+            <input type="hidden" name="mascota_id" value="{{ mascota.id }}">
+            {{ selector("veterinario_id", "2. Veterinario", veterinarios, datos, col="col-md-7", vacio="Seleccioná…", requerido=true) }}
+            {{ selector("tipo", "Tipo de atención", tipos, datos, col="col-md-5") }}
+            {{ campo("fecha_hora", "Fecha y hora", {"fecha_hora": datos.get("fecha_hora", "")|input_fh}, tipo="datetime-local", col="col-md-7", requerido=true) }}
+            {{ campo("peso", "Peso (kg)", datos, tipo="number", col="col-md-5", extra='step="0.1" min="0"') }}
+            {% if turnos %}{{ selector("turno_id", "Turno que se atiende", turnos, datos, col="col-12", vacio="Sin turno (atención espontánea)") }}{% endif %}
+            {{ campo("motivo", "Motivo de consulta", datos, col="col-12", requerido=true) }}
+            {{ campo("diagnostico", "Diagnóstico", datos, col="col-12") }}
+            {{ area("tratamiento", "Tratamiento indicado", datos, filas=2) }}
+
+            <div class="col-12">
+              <label class="form-label">Vacunas aplicadas en esta atención</label>
+              <div class="border rounded p-2">
+                {% for v in esquema %}
+                  <div class="form-check d-flex align-items-center gap-2">
+                    <input class="form-check-input" type="checkbox" name="vacunas" value="{{ v.tipo.id }}" id="vac{{ v.tipo.id }}"
+                           {% if v.tipo.id in vacunas_marcadas %}checked{% endif %}>
+                    <label class="form-check-label flex-grow-1" for="vac{{ v.tipo.id }}">{{ v.tipo.nombre }}
+                      {% if not v.tipo.obligatoria %}<span class="text-body-secondary small">(opcional)</span>{% endif %}</label>
+                    {{ estado(v.estado) }}
+                  </div>
+                {% endfor %}
+                <div class="mt-2" style="max-width: 220px">{{ campo("lote", "Lote", datos, col="") }}</div>
+              </div>
+            </div>
+            <div class="col-12 d-flex flex-wrap gap-2">
+              <button class="btn btn-primary"><i class="bi bi-check-lg"></i> Registrar atención</button>
+              <button class="btn btn-outline-primary" name="derivar" value="1"><i class="bi bi-eyedropper"></i> Registrar y derivar a laboratorio</button>
+            </div>
+          </form>
+        {% else %}
+          {{ vacio("Elegí un paciente para ver su esquema de vacunación y sus turnos pendientes.", "person-check") }}
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-xl-5">
+    <div class="card">
+      <div class="card-header"><i class="bi bi-clock-history"></i>Atenciones recientes</div>
+      <div class="table-responsive tabla-scroll" style="max-height: 760px">
+        <table class="table table-hover table-sm">
+          <thead><tr><th>Fecha</th><th>Paciente</th><th>Motivo</th><th></th></tr></thead>
+          <tbody>
+          {% for c in recientes %}
+            <tr>
+              <td class="small text-nowrap">{{ c.fecha_hora|fh }}<div class="text-body-secondary">{{ c.clinica }}</div></td>
+              <td><span class="fw-semibold">{{ c.mascota }}</span><div class="small text-body-secondary">{{ c.tipo|capitalize }}</div></td>
+              <td class="small">{{ c.motivo }}</td>
+              <td class="text-end">
+                <a class="btn btn-sm {{ 'btn-light' if c.ordenes else 'btn-outline-primary' }}" href="{{ url_for('atencion.orden', consulta_id=c.id) }}"
+                   data-bs-toggle="tooltip" title="{{ 'Ver órdenes (' ~ c.ordenes ~ ')' if c.ordenes else 'Emitir orden de derivación' }}">
+                  <i class="bi bi-eyedropper"></i>{% if c.ordenes %} {{ c.ordenes }}{% endif %}</a>
+              </td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

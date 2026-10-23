@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% from "_macros.html" import campo, selector, estado, vacio, boton_post %}
+{% set activo = "atencion.agenda" %}
+{% block titulo %}Agenda{% endblock %}
+{% block subtitulo %}Turnos de los profesionales · sin superposición, de 8 a 20 h{% endblock %}
+{% block contenido %}
+<div class="row g-3">
+  <div class="col-xl-8">
+    <div class="card">
+      <div class="card-header">
+        <form class="row g-2 align-items-end" method="get">
+          <div class="col-sm-3"><label class="form-label">Fecha</label>
+            <input type="date" class="form-control form-control-sm" name="fecha" value="{{ fecha }}"></div>
+          <div class="col-sm-5"><label class="form-label">Veterinario</label>
+            <select class="form-select form-select-sm" name="veterinario"><option value="">Todos</option>
+              {% for id, texto in veterinarios %}<option value="{{ id }}" {% if id == veterinario %}selected{% endif %}>{{ texto }}</option>{% endfor %}
+            </select></div>
+          <div class="col-sm-2"><div class="form-check mb-1">
+            <input type="hidden" name="pendientes" value="0">
+            <input class="form-check-input" type="checkbox" name="pendientes" value="1" id="pend" {% if solo_pendientes %}checked{% endif %}>
+            <label class="form-check-label small" for="pend">Pendientes</label></div></div>
+          <div class="col-sm-2"><button class="btn btn-sm btn-outline-primary w-100"><i class="bi bi-funnel"></i> Filtrar</button></div>
+        </form>
+      </div>
+      <div class="table-responsive tabla-scroll">
+        <table class="table table-hover">
+          <thead><tr><th>Fecha</th><th>Horario</th><th>Paciente</th><th>Veterinario</th><th>Clínica</th><th>Motivo</th><th>Estado</th><th></th></tr></thead>
+          <tbody>
+          {% for t in turnos %}
+            <tr>
+              <td>{{ t.inicio[:10]|fh }}</td><td class="fw-semibold text-nowrap">{{ t.inicio[11:] }} – {{ t.fin[11:] }}</td>
+              <td>{{ t.mascota }}</td><td>{{ t.veterinario }}</td><td>{{ t.clinica }}</td><td>{{ t.motivo }}</td><td>{{ estado(t.estado) }}</td>
+              <td class="text-end text-nowrap">{% if t.estado == "PENDIENTE" %}
+                <a class="btn btn-sm btn-light" href="{{ url_for('atencion.atencion', mascota=t.mascota_id) }}" data-bs-toggle="tooltip" title="Atender"><i class="bi bi-clipboard2-plus"></i></a>
+                {{ boton_post(url_for('atencion.cancelar', turno_id=t.id), "", clase="btn-light text-danger", icono="x-lg", confirmar="¿Cancelar el turno?") }}
+              {% endif %}</td>
+            </tr>
+          {% else %}<tr><td colspan="8">{{ vacio("No hay turnos con esos filtros.", "calendar-x") }}</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="col-xl-4">
+    <div class="card">
+      <div class="card-header"><i class="bi bi-calendar-plus"></i>Reservar turno</div>
+      <div class="card-body">
+        <form method="post" action="{{ url_for('atencion.reservar') }}" class="row g-3">
+          {{ selector("veterinario_id", "Veterinario", veterinarios, datos, col="col-12", vacio="Seleccioná…", requerido=true) }}
+          {{ selector("mascota_id", "Paciente", mascotas, datos, col="col-12", vacio="Seleccioná…", requerido=true) }}
+          {{ campo("inicio", "Inicio", {"inicio": datos.get("inicio", "")|input_fh}, tipo="datetime-local", col="col-md-7", requerido=true) }}
+          {{ campo("duracion_min", "Duración (min)", datos, tipo="number", col="col-md-5", extra='min="5" step="5"') }}
+          {{ campo("motivo", "Motivo", datos, col="col-12") }}
+          <div class="col-12"><button class="btn btn-primary"><i class="bi bi-check-lg"></i> Reservar</button></div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

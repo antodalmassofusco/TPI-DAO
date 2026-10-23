@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% from "_macros.html" import estado, vacio %}
+{% set activo = "laboratorio.resultados" %}
+{% block titulo %}Resultados de análisis{% endblock %}
+{% block subtitulo %}Proceso 7 · Muestras recibidas en el laboratorio central{% endblock %}
+{% block contenido %}
+<ul class="nav nav-pills mb-3 gap-1">
+  {% for clave, (texto, _) in filtros.items() %}
+    <li class="nav-item"><a class="nav-link {% if clave == filtro %}active{% endif %}" href="{{ url_for('laboratorio.resultados', filtro=clave) }}">
+      {{ texto }} <span class="badge {{ 'text-bg-light' if clave == filtro else 'text-bg-secondary' }} ms-1">{{ conteo[clave] }}</span></a></li>
+  {% endfor %}
+</ul>
+<div class="card">
+  <div class="table-responsive tabla-scroll" style="max-height: 72vh">
+    <table class="table table-hover">
+      <thead><tr><th>Muestra</th><th>Prioridad</th><th>Clínica</th><th>Paciente</th><th>Análisis</th><th>Remito</th><th>Estado</th><th></th></tr></thead>
+      <tbody>
+      {% for m in muestras %}
+        <tr data-href="{{ url_for('laboratorio.muestra', muestra_id=m.id) }}">
+          <td class="fw-semibold">{{ m.codigo }}</td><td>{{ estado(m.prioridad) }}</td><td>{{ m.clinica }}</td>
+          <td>{{ m.mascota }} <span class="small text-body-secondary">({{ m.especie }})</span></td>
+          <td>{{ m.analisis }}<div class="small text-body-secondary">{{ m.tipo_muestra }}</div></td>
+          <td>{{ m.remito or "—" }}</td>
+          <td>{{ estado(m.estado) }}{% if m.motivo_rechazo %}<div class="small text-danger">{{ m.motivo_rechazo }}</div>{% endif %}</td>
+          <td class="text-end text-nowrap">
+            {% if m.estado == "RECIBIDA" %}<a class="btn btn-sm btn-primary" href="{{ url_for('laboratorio.muestra', muestra_id=m.id) }}"><i class="bi bi-pencil-square"></i> Cargar resultado</a>
+            {% else %}<a class="btn btn-sm btn-light" href="{{ url_for('laboratorio.trazabilidad', codigo=m.codigo) }}" data-bs-toggle="tooltip" title="Trazabilidad"><i class="bi bi-signpost-split"></i></a>{% endif %}
+          </td>
+        </tr>
+      {% else %}<tr><td colspan="8">{{ vacio("No hay muestras en este estado.", "eyedropper") }}</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

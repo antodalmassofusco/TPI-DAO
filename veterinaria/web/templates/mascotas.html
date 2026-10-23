@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% from "_macros.html" import campo, selector, vacio, boton_post %}
+{% set activo = "clientes.mascotas" %}
+{% block titulo %}Mascotas{% endblock %}
+{% block subtitulo %}Proceso 2 · Pacientes e historias clínicas{% endblock %}
+{% block contenido %}
+<div class="row g-3">
+  <div class="col-xl-8">
+    <div class="card">
+      <div class="card-header d-flex align-items-center gap-2">
+        <span><i class="bi bi-heart-pulse"></i>Pacientes <span class="badge text-bg-light">{{ mascotas|length }}</span></span>
+        <form class="ms-auto" method="get">
+          <div class="input-group input-group-sm">
+            <span class="input-group-text"><i class="bi bi-search"></i></span>
+            <input class="form-control" name="q" value="{{ q }}" placeholder="Nombre, responsable o DNI">
+          </div>
+        </form>
+      </div>
+      <div class="table-responsive tabla-scroll">
+        <table class="table table-hover">
+          <thead><tr><th>Nombre</th><th>Especie</th><th>Raza</th><th>Sexo</th><th>Nacimiento</th><th class="text-end">Peso</th><th>Responsable</th><th></th></tr></thead>
+          <tbody>
+          {% for m in mascotas %}
+            <tr data-href="{{ url_for('clientes.historia', mascota_id=m.id) }}" {% if m.id == mascota_id %}class="table-primary"{% endif %}>
+              <td class="fw-semibold"><i class="bi bi-{{ 'emoji-smile' if m.especie == 'Perro' else 'emoji-heart-eyes' }} text-body-tertiary"></i> {{ m.nombre }}</td>
+              <td>{{ m.especie }}</td><td>{{ m.raza }}</td><td>{{ "Macho" if m.sexo == "M" else "Hembra" }}</td>
+              <td>{{ m.fecha_nacimiento|fh }}</td><td class="text-end">{{ m.peso|num(1) }} kg</td><td>{{ m.responsable }}</td>
+              <td class="text-end text-nowrap">
+                <a class="btn btn-sm btn-light" href="{{ url_for('clientes.historia', mascota_id=m.id) }}" data-bs-toggle="tooltip" title="Historia clínica"><i class="bi bi-journal-medical"></i></a>
+                <a class="btn btn-sm btn-light" href="{{ url_for('clientes.mascotas', editar=m.id) }}" data-bs-toggle="tooltip" title="Editar"><i class="bi bi-pencil"></i></a>
+              </td>
+            </tr>
+          {% else %}<tr><td colspan="8">{{ vacio("No se encontraron mascotas.") }}</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-xl-4">
+    <div class="card">
+      <div class="card-header"><i class="bi bi-{{ 'pencil-square' if mascota_id else 'plus-circle' }}"></i>{{ "Editar mascota" if mascota_id else "Nueva mascota" }}</div>
+      <div class="card-body">
+        <form method="post" action="{{ url_for('clientes.modificar_mascota', mascota_id=mascota_id) if mascota_id else url_for('clientes.guardar_mascota') }}" class="row g-3">
+          {{ selector("cliente_id", "Responsable", clientes, datos, col="col-12", vacio="Seleccioná el responsable…", requerido=true) }}
+          {{ campo("nombre", "Nombre", datos, requerido=true) }}
+          {{ selector("especie", "Especie", especies, datos, requerido=true) }}
+          {{ campo("raza", "Raza", datos) }}
+          {{ selector("sexo", "Sexo", [("M", "Macho"), ("H", "Hembra")], datos) }}
+          {{ campo("fecha_nacimiento", "Fecha de nacimiento", datos, tipo="date", requerido=true) }}
+          {{ campo("peso", "Peso (kg)", datos, tipo="number", extra='step="0.1" min="0"') }}
+          <div class="col-12 d-flex gap-2">
+            <button class="btn btn-primary"><i class="bi bi-check-lg"></i> Guardar</button>
+            {% if mascota_id %}<a href="{{ url_for('clientes.mascotas') }}" class="btn btn-light">Cancelar</a>{% endif %}
+          </div>
+        </form>
+        {% if mascota_id %}
+          <hr>
+          {{ boton_post(url_for('clientes.baja_mascota', mascota_id=mascota_id), "Dar de baja", icono="x-circle", confirmar="¿Dar de baja a esta mascota?") }}
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

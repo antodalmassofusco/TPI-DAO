@@ -1,0 +1,22 @@
+{# Resumen de trazabilidad de una muestra: se usa en "Trazabilidad" y en la carga de resultados #}
+{% from "_macros.html" import estado %}
+{% set m = t.muestra %}
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+      <span class="h5 mb-0">{{ m.codigo }}</span><span class="text-body-secondary">{{ m.analisis }}</span>
+      <span class="ms-auto">{{ estado(m.prioridad) }} {{ estado(m.estado) }}</span>
+    </div>
+    {% if m.motivo_rechazo %}
+      <div class="alert alert-danger py-2 small d-flex gap-2"><i class="bi bi-x-octagon-fill"></i><div><strong>Motivo de rechazo:</strong> {{ m.motivo_rechazo }}</div></div>
+    {% endif %}
+    <div class="row g-3 small">
+      <div class="col-sm-6"><div class="text-body-secondary">Paciente</div><div class="fw-semibold">{{ m.mascota }}</div><div>{{ m.responsable }}</div></div>
+      <div class="col-sm-6"><div class="text-body-secondary">Clínica de origen</div><div class="fw-semibold">{{ m.clinica }}</div><div>Atención #{{ m.consulta_id }}</div></div>
+      <div class="col-sm-6"><div class="text-body-secondary">Conservación requerida</div><div class="fw-semibold">{{ m.temp_min|num }} a {{ m.temp_max|num }} °C</div><div>Viable {{ m.horas_viabilidad }} h desde la extracción</div></div>
+      <div class="col-sm-6"><div class="text-body-secondary">Remito / precinto</div>
+        {% if m.remito %}<a class="fw-semibold" href="{{ url_for('logistica.remito', remito_id=m.remito_id) }}">{{ m.remito }}</a> · {{ m.precinto }} {{ estado(m.estado_precinto) }}
+          <div>{{ m.contenedor }} · {{ m.transportista or "sin despachar" }}</div>{% else %}<div>Todavía no empaquetada</div>{% endif %}</div>
+    </div>
+  </div>
+</div>

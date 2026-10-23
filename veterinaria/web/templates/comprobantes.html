@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% from "_macros.html" import vacio, boton_post %}
+{% set activo = "facturacion.comprobantes" %}
+{% block titulo %}Comprobantes{% endblock %}
+{% block subtitulo %}Proceso 7 · Comprobantes de atención: consulta, vacunas y análisis realizados{% endblock %}
+{% block contenido %}
+<div class="row g-3">
+  <div class="col-xl-6">
+    <div class="card">
+      <div class="card-header"><i class="bi bi-hourglass-split"></i>Atenciones sin comprobante <span class="badge text-bg-light">{{ pendientes|length }}</span></div>
+      <div class="table-responsive tabla-scroll" style="max-height: 72vh">
+        <table class="table table-hover">
+          <thead><tr><th>Fecha</th><th>Paciente</th><th>Clínica</th><th>Tipo</th><th></th></tr></thead>
+          <tbody>
+          {% for c in pendientes %}
+            <tr>
+              <td class="small">{{ c.fecha_hora|fh }}</td><td class="fw-semibold">{{ c.mascota }}</td><td>{{ c.clinica }}</td><td>{{ c.tipo|capitalize }}</td>
+              <td class="text-end">
+                {% if c.muestras_pendientes %}
+                  <span class="badge text-bg-warning" data-bs-toggle="tooltip" title="Se emite cuando el laboratorio informe todos los resultados">
+                    <i class="bi bi-hourglass"></i> {{ c.muestras_pendientes }} muestra(s) sin resultado</span>
+                {% else %}
+                  {{ boton_post(url_for('facturacion.emitir', consulta_id=c.id), "Emitir", clase="btn-primary", icono="receipt") }}
+                {% endif %}
+              </td>
+            </tr>
+          {% else %}<tr><td colspan="5">{{ vacio("Todas las atenciones tienen comprobante.", "check2-all") }}</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="col-xl-6">
+    <div class="card">
+      <div class="card-header"><i class="bi bi-receipt"></i>Comprobantes emitidos <span class="badge text-bg-light">{{ emitidos|length }}</span></div>
+      <div class="table-responsive tabla-scroll" style="max-height: 72vh">
+        <table class="table table-hover">
+          <thead><tr><th>Número</th><th>Fecha</th><th>Cliente</th><th>Clínica</th><th class="text-end">Total</th></tr></thead>
+          <tbody>
+          {% for cp in emitidos %}
+            <tr data-href="{{ url_for('facturacion.comprobante', comprobante_id=cp.id) }}">
+              <td class="fw-semibold">{{ cp.numero }}</td><td class="small">{{ cp.fecha_hora|fh }}</td>
+              <td>{{ cp.cliente }}<div class="small text-body-secondary">{{ cp.mascota }}</div></td><td>{{ cp.clinica }}</td>
+              <td class="text-end fw-semibold">{{ cp.total|moneda }}</td>
+            </tr>
+          {% else %}<tr><td colspan="5">{{ vacio("Todavía no se emitieron comprobantes.", "receipt") }}</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

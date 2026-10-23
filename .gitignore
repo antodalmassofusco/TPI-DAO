@@ -1,0 +1,18 @@
+# Base de datos local: cada integrante genera la suya con `python main.py`
+veterinaria.db
+*.db-journal
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Configuración personal de Claude Code (sincronización automática de cada integrante)
+.claude/
+
+# Editores y sistema
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini

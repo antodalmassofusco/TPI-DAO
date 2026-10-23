@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block titulo %}{% endblock %} · VetRed</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap.min.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap-icons.min.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/estilos.css') }}">
+</head>
+<body>
+{% set menu = [
+  ("General", [("inicio.tablero", "speedometer2", "Inicio")]),
+  ("Clínica", [("clientes.listar", "people", "Clientes"), ("clientes.mascotas", "heart-pulse", "Mascotas"),
+               ("atencion.agenda", "calendar3", "Agenda"), ("atencion.atencion", "clipboard2-pulse", "Atención clínica")]),
+  ("Laboratorio", [("logistica.empaquetado", "box-seam", "Empaquetado"), ("logistica.remitos", "truck", "Remitos y envíos"),
+                   ("laboratorio.resultados", "eyedropper", "Resultados"), ("laboratorio.trazabilidad", "signpost-split", "Trazabilidad")]),
+  ("Administración", [("facturacion.comprobantes", "receipt", "Comprobantes"), ("reportes.reportes", "bar-chart-line", "Reportes"),
+                      ("facturacion.avisos", "bell", "Avisos")]),
+] %}
+
+<aside class="offcanvas-lg offcanvas-start barra-lateral" tabindex="-1" id="menu">
+  <div class="marca">
+    <i class="bi bi-hospital"></i>
+    <div>
+      <div class="marca-nombre">VetRed</div>
+      <div class="marca-sub">Red de clínicas y laboratorio</div>
+    </div>
+    <button type="button" class="btn-close btn-close-white d-lg-none ms-auto" data-bs-dismiss="offcanvas" data-bs-target="#menu"></button>
+  </div>
+  <nav class="menu">
+    {% for grupo, items in menu %}
+      <div class="menu-grupo">{{ grupo }}</div>
+      {% for endpoint, icono, texto in items %}
+        <a href="{{ url_for(endpoint) }}" class="menu-item {% if activo == endpoint %}activo{% endif %}">
+          <i class="bi bi-{{ icono }}"></i> {{ texto }}
+        </a>
+      {% endfor %}
+    {% endfor %}
+  </nav>
+</aside>
+
+<div class="contenido">
+  <header class="cabecera">
+    <button class="btn btn-light d-lg-none me-2" data-bs-toggle="offcanvas" data-bs-target="#menu"><i class="bi bi-list"></i></button>
+    <div>
+      <h1 class="h4 mb-0">{{ self.titulo() }}</h1>
+      <div class="text-body-secondary small">{% block subtitulo %}{% endblock %}</div>
+    </div>
+    <div class="ms-auto d-flex gap-2">{% block acciones %}{% endblock %}</div>
+  </header>
+
+  <main class="px-3 px-lg-4 pb-5">
+    {% with mensajes = get_flashed_messages(with_categories=true) %}
+      {% for categoria, mensaje in mensajes %}
+        <div class="alert alert-{{ categoria }} alert-dismissible fade show d-flex gap-2 shadow-sm" role="alert">
+          <i class="bi bi-{{ {'success': 'check-circle-fill', 'warning': 'exclamation-triangle-fill', 'danger': 'x-octagon-fill'}.get(categoria, 'info-circle-fill') }}"></i>
+          <div style="white-space: pre-line">{{ mensaje }}</div>
+          <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+      {% endfor %}
+    {% endwith %}
+    {% block contenido %}{% endblock %}
+  </main>
+</div>
+
+<script src="{{ url_for('static', filename='vendor/bootstrap.bundle.min.js') }}"></script>
+<script>
+  // Tooltips de Bootstrap y filas de tabla clickeables
+  document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el));
+  document.querySelectorAll('tr[data-href]').forEach(fila => fila.addEventListener('click', e => {
+    if (!e.target.closest('a, button, input, form')) window.location = fila.dataset.href;
+  }));
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

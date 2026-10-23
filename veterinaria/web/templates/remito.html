@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% from "_macros.html" import campo, area, estado, vacio %}
+{% set activo = "logistica.remitos" %}
+{% block titulo %}Remito {{ r.numero }}{% endblock %}
+{% block subtitulo %}{{ r.clinica }} → laboratorio central · emitido el {{ r.fecha_emision|fh }} por {{ r.responsable }}{% endblock %}
+{% block acciones %}<a href="{{ url_for('logistica.remitos', estado=r.estado) }}" class="btn btn-light"><i class="bi bi-arrow-left"></i> Remitos</a>{% endblock %}
+{% block contenido %}
+<div class="row g-3">
+  <div class="col-xl-5">
+    <div class="card mb-3">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <span class="h5 mb-0">{{ r.numero }}</span>{{ estado(r.estado) }}
+        </div>
+        <div class="row g-2 small">
+          <div class="col-6"><div class="text-body-secondary">Conservadora</div><div class="fw-semibold">{{ r.contenedor }}</div>
+            <div class="text-body-secondary">{{ r.temp_min|num }} a {{ r.temp_max|num }} °C</div></div>
+          <div class="col-6"><div class="text-body-secondary">Precinto sanitario</div><div class="fw-semibold">{{ r.precinto }}</div>
+            <div>{{ estado(r.estado_precinto) }}</div></div>
+          <div class="col-6"><div class="text-body-secondary">Transportista</div><div class="fw-semibold">{{ r.transportista or "—" }}</div>
+            <div class="text-body-secondary">{{ r.vehiculo or "" }}</div></div>
+          <div class="col-6"><div class="text-body-secondary">Muestras</div><div class="fw-semibold">{{ r.muestras }}</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-header"><i class="bi bi-droplet-half"></i>Muestras del remito</div>
+      <ul class="list-group list-group-flush">
+        {% for m in muestras %}
+          <li class="list-group-item">
+            <div class="d-flex align-items-center gap-2">
+              <a href="{{ url_for('laboratorio.trazabilidad', codigo=m.codigo) }}" class="fw-semibold">{{ m.codigo }}</a>
+              <span class="small">{{ m.analisis }} · {{ m.mascota }}</span>
+              <span class="ms-auto">{{ estado(m.estado_clave) }}</span>
+            </div>
+            {% if m.motivo_rechazo %}<div class="small text-danger mt-1"><i class="bi bi-x-octagon"></i> {{ m.motivo_rechazo }}</div>{% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><i class="bi bi-signpost-split"></i>Cadena de envío</div>
+      <div class="card-body">
+        {% if eventos %}
+        <ul class="linea-tiempo">
+          {% for e in eventos %}
+            {% set fuera = e.temperatura < r.temp_min or e.temperatura > r.temp_max %}
+            <li>
+              <span class="punto bg-{{ 'danger' if fuera else {'SALIDA': 'primary', 'LLEGADA': 'success'}.get(e.tipo, 'info') }}">
+                <i class="bi bi-{{ {'SALIDA': 'box-arrow-right', 'LLEGADA': 'box-arrow-in-down', 'PUNTO_CONTROL': 'geo-alt'}[e.tipo] }}"></i></span>
+              <div class="d-flex"><span class="fw-semibold">{{ {'SALIDA': 'Salida', 'LLEGADA': 'Llegada', 'PUNTO_CONTROL': 'Punto de control'}[e.tipo] }} · {{ e.ubicacion }}</span>
+                <span class="ms-auto small text-body-secondary">{{ e.fecha_hora|fh }}</span></div>
+              <div class="small"><span class="{{ 'text-danger fw-semibold' if fuera else '' }}"><i class="bi bi-thermometer-half"></i> {{ e.temperatura|num(1) }} °C{% if fuera %} (fuera de rango){% endif %}</span>
+                · {{ e.responsable }}{% if e.observacion %} · <span class="text-body-secondary">{{ e.observacion }}</span>{% endif %}</div>
+            </li>
+          {% endfor %}
+        </ul>
+        {% else %}{{ vacio("Todavía no fue despachado.", "hourglass") }}{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-xl-7">
+    {% if r.estado == "EMITIDO" %}
+      <div class="card">
+        <div class="card-header"><i class="bi bi-truck"></i>5 · Despachar hacia el laboratorio</div>
+        <div class="card-body">
+          <form method="post" action="{{ url_for('logistica.despachar', remito_id=r.id) }}" class="row g-3">
+            {{ campo("transportista", "Transportista", datos, requerido=true) }}
+            {{ campo("vehiculo", "Vehículo / patente", datos) }}
+            {{ campo("temperatura", "Temperatura al salir (°C)", datos, tipo="number", requerido=true, extra='step="0.1"') }}
+            {{ campo("fecha_hora", "Fecha y hora de salida", {"fecha_hora": (datos.get("fecha_hora") or ahora)|input_fh}, tipo="datetime-local", requerido=true) }}
+            <div class="col-12"><button class="btn btn-primary"><i class="bi bi-truck"></i> Despachar</button></div>
+          </form>
+        </div>
+      </div>
+    {% elif r.estado == "EN_TRANSITO" %}
+      {% set d_control = datos if formulario == "control" else {} %}
+      {% set d_recibir = datos if formulario == "recibir" else {} %}
+      <div class="card mb-3">
+        <div class="card-header"><i class="bi bi-geo-alt"></i>5 · Registrar punto de control en ruta</div>
+        <div class="card-body">
+          <form method="post" action="{{ url_for('logistica.control', remito_id=r.id) }}" class="row g-3">
+            <input type="hidden" name="formulario" value="control">
+            {{ campo("ubicacion", "Ubicación", d_control, requerido=true) }}
+            {{ campo("temperatura", "Temperatura registrada (°C)", d_control, tipo="number", requerido=true, extra='step="0.1"') }}
+            {{ campo("responsable", "Responsable", d_control) }}
+            {{ campo("fecha_hora", "Fecha y hora", {"fecha_hora": (d_control.get("fecha_hora") or ahora)|input_fh}, tipo="datetime-local", requerido=true) }}
+            {{ campo("observacion", "Observación", d_control, col="col-12") }}
+            <div class="col-12"><button class="btn btn-outline-primary"><i class="bi bi-plus-lg"></i> Registrar control</button></div>
+          </form>
+        </div>
+      </div>
+      <div class="card border-start border-4 border-success">
+        <div class="card-header"><i class="bi bi-box-arrow-in-down"></i>6 · Recepción en el laboratorio central</div>
+        <div class="card-body">
+          <p class="small text-body-secondary">Al registrar la recepción se verifica cada muestra: estado del precinto, temperaturas de toda la cadena de envío y tiempo transcurrido desde la extracción.</p>
+          <form method="post" action="{{ url_for('logistica.recibir', remito_id=r.id) }}" class="row g-3"
+                onsubmit="return this.precinto.value === 'INTACTO' || confirm('Con el precinto roto TODAS las muestras pasarán a Muestra Rechazada. ¿Continuar?')">
+            <input type="hidden" name="formulario" value="recibir">
+            <div class="col-12">
+              <label class="form-label">Estado del precinto sanitario {{ r.precinto }} <span class="text-danger">*</span></label>
+              <div class="d-flex gap-2">
+                <input type="radio" class="btn-check" name="precinto" id="intacto" value="INTACTO" {% if d_recibir.get('precinto', 'INTACTO') == 'INTACTO' %}checked{% endif %}>
+                <label class="btn btn-outline-success flex-fill" for="intacto"><i class="bi bi-shield-check"></i> Intacto</label>
+                <input type="radio" class="btn-check" name="precinto" id="roto" value="ROTO" {% if d_recibir.get('precinto') == 'ROTO' %}checked{% endif %}>
+                <label class="btn btn-outline-danger flex-fill" for="roto"><i class="bi bi-shield-x"></i> Roto o violentado</label>
+              </div>
+            </div>
+            {{ campo("recibido_por", "Recibido por", d_recibir, requerido=true) }}
+            {{ campo("temperatura", "Temperatura de llegada (°C)", d_recibir, tipo="number", requerido=true, extra='step="0.1"') }}
+            {{ campo("fecha_hora", "Fecha y hora", {"fecha_hora": (d_recibir.get("fecha_hora") or ahora)|input_fh}, tipo="datetime-local", requerido=true) }}
+            {{ campo("observaciones", "Observaciones", d_recibir) }}
+            <div class="col-12"><button class="btn btn-success"><i class="bi bi-check2-circle"></i> Registrar recepción</button></div>
+          </form>
+        </div>
+      </div>
+    {% else %}
+      <div class="card">
+        <div class="card-body text-center py-5">
+          <i class="bi bi-{{ 'check-circle text-success' if r.estado == 'RECIBIDO' else 'x-octagon text-danger' }}" style="font-size: 3rem"></i>
+          <h2 class="h5 mt-2">Remito {{ "recibido" if r.estado == "RECIBIDO" else "rechazado" }}</h2>
+          <p class="text-body-secondary mb-3">La cadena de custodia de este remito está cerrada.
+            {% if r.estado == "RECIBIDO" %}Las muestras aceptadas ya pueden analizarse.{% endif %}</p>
+          <a class="btn btn-outline-primary" href="{{ url_for('laboratorio.resultados') }}"><i class="bi bi-eyedropper"></i> Ir a resultados</a>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

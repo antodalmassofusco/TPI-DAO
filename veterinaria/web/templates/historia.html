@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% from "_macros.html" import estado, vacio %}
+{% set activo = "clientes.mascotas" %}
+{% set m, c = h.mascota, h.cliente %}
+{% block titulo %}Historia clínica de {{ m.nombre }}{% endblock %}
+{% block subtitulo %}Proceso 2 · Atenciones, vacunas y análisis de laboratorio{% endblock %}
+{% block acciones %}
+  <a href="{{ url_for('clientes.mascotas') }}" class="btn btn-light"><i class="bi bi-arrow-left"></i> Mascotas</a>
+  <a href="{{ url_for('atencion.atencion', mascota=m.id) }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Nueva atención</a>
+{% endblock %}
+{% block contenido %}
+<div class="row g-3">
+  <div class="col-xl-4">
+    <div class="card mb-3">
+      <div class="card-body">
+        <div class="d-flex align-items-center gap-3 mb-3">
+          <div class="kpi-icono bg-primary-subtle text-primary"><i class="bi bi-heart-pulse"></i></div>
+          <div><div class="h5 mb-0">{{ m.nombre }}</div><div class="text-body-secondary small">{{ m.especie }} · {{ m.raza }}</div></div>
+        </div>
+        <dl class="row small mb-0">
+          <dt class="col-5 text-body-secondary fw-normal">Sexo</dt><dd class="col-7">{{ "Macho" if m.sexo == "M" else "Hembra" }}</dd>
+          <dt class="col-5 text-body-secondary fw-normal">Nacimiento</dt><dd class="col-7">{{ m.fecha_nacimiento|fh }} ({{ m.edad_meses() }} meses)</dd>
+          <dt class="col-5 text-body-secondary fw-normal">Peso</dt><dd class="col-7">{{ m.peso|num(1) }} kg</dd>
+          <dt class="col-5 text-body-secondary fw-normal">Responsable</dt><dd class="col-7">{{ c.nombre_completo }}</dd>
+          <dt class="col-5 text-body-secondary fw-normal">DNI</dt><dd class="col-7">{{ c.dni }}</dd>
+          <dt class="col-5 text-body-secondary fw-normal">Contacto</dt><dd class="col-7">{{ c.telefono }}<br>{{ c.email }}</dd>
+        </dl>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><i class="bi bi-shield-plus"></i>Esquema de vacunación</div>
+      <ul class="list-group list-group-flush">
+        {% for v in h.esquema_vacunas %}
+          <li class="list-group-item">
+            <div class="d-flex justify-content-between align-items-center">
+              <span class="fw-semibold">{{ v.tipo.nombre }}{% if not v.tipo.obligatoria %} <span class="text-body-secondary fw-normal small">(opcional)</span>{% endif %}</span>
+              {{ estado(v.estado) }}
+            </div>
+            <div class="small text-body-secondary">Última: {{ v.ultima or "—" }} · Próxima: {{ v.proxima or "—" }}</div>
+          </li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+
+  <div class="col-xl-8">
+    <div class="card">
+      <div class="card-header"><i class="bi bi-journal-medical"></i>Atenciones <span class="badge text-bg-light">{{ h.consultas|length }}</span></div>
+      <div class="card-body">
+        {% if h.consultas %}
+        <ul class="linea-tiempo">
+          {% for co in h.consultas %}
+            <li>
+              <span class="punto bg-{{ {'URGENCIA': 'danger', 'CONTROL': 'success'}.get(co.tipo, 'primary') }}"><i class="bi bi-clipboard2-pulse"></i></span>
+              <div class="d-flex flex-wrap gap-2 align-items-baseline">
+                <span class="fw-semibold">{{ co.motivo }}</span>
+                <span class="badge text-bg-light">{{ co.tipo|capitalize }}</span>
+                <span class="small text-body-secondary ms-auto">{{ co.fecha_hora|fh }} · {{ co.clinica }} · {{ co.veterinario }}</span>
+              </div>
+              {% if co.diagnostico %}<div class="small"><span class="text-body-secondary">Diagnóstico:</span> {{ co.diagnostico }}</div>{% endif %}
+              {% if co.tratamiento %}<div class="small"><span class="text-body-secondary">Tratamiento:</span> {{ co.tratamiento }}</div>{% endif %}
+              {% for v in co.vacunas %}<div class="small"><i class="bi bi-shield-check text-success"></i> Vacuna {{ v.nombre }} <span class="text-body-secondary">(lote {{ v.lote or "-" }})</span></div>{% endfor %}
+              {% for mu in co.muestras %}
+                <div class="small mt-1 p-2 rounded bg-body-tertiary">
+                  <i class="bi bi-eyedropper"></i>
+                  <a href="{{ url_for('laboratorio.trazabilidad', codigo=mu.codigo) }}">{{ mu.codigo }}</a> · {{ mu.analisis }} ·
+                  <span class="fw-semibold">{{ mu.estado }}</span>
+                  {% if mu.conclusion %}<div>Resultado: {{ mu.valores }} → <strong>{{ mu.conclusion }}</strong></div>{% endif %}
+                  {% if mu.motivo_rechazo %}<div class="text-danger">{{ mu.motivo_rechazo }}</div>{% endif %}
+                </div>
+              {% endfor %}
+            </li>
+          {% endfor %}
+        </ul>
+        {% else %}{{ vacio("Todavía no tiene atenciones registradas.", "journal") }}{% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

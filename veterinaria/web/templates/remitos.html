@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% from "_macros.html" import estado, vacio %}
+{% set activo = "logistica.remitos" %}
+{% block titulo %}Remitos y envíos{% endblock %}
+{% block subtitulo %}Procesos 5 y 6 · Cadena de envío y recepción en el laboratorio central{% endblock %}
+{% block acciones %}<a href="{{ url_for('logistica.empaquetado') }}" class="btn btn-primary"><i class="bi bi-box-seam"></i> Empaquetar muestras</a>{% endblock %}
+{% block contenido %}
+<ul class="nav nav-pills mb-3 gap-1">
+  {% for clave, texto in filtros.items() %}
+    <li class="nav-item"><a class="nav-link {% if clave == estado %}active{% endif %}" href="{{ url_for('logistica.remitos', estado=clave) }}">
+      {{ texto }} <span class="badge {{ 'text-bg-light' if clave == estado else 'text-bg-secondary' }} ms-1">{{ conteo[clave] }}</span></a></li>
+  {% endfor %}
+</ul>
+<div class="card">
+  <div class="table-responsive tabla-scroll" style="max-height: 70vh">
+    <table class="table table-hover">
+      <thead><tr><th>Remito</th><th>Emisión</th><th>Clínica</th><th>Conservadora</th><th>Precinto</th><th class="text-center">Muestras</th><th>Transportista</th><th>Estado</th><th></th></tr></thead>
+      <tbody>
+      {% for r in remitos %}
+        <tr data-href="{{ url_for('logistica.remito', remito_id=r.id) }}">
+          <td class="fw-semibold">{{ r.numero }}</td><td class="small">{{ r.fecha_emision|fh }}</td><td>{{ r.clinica }}</td>
+          <td>{{ r.contenedor }}</td><td>{{ r.precinto }} {% if r.estado_precinto != "COLOCADO" %}{{ estado(r.estado_precinto) }}{% endif %}</td>
+          <td class="text-center">{{ r.muestras }}</td><td>{{ r.transportista or "—" }}</td><td>{{ estado(r.estado) }}</td>
+          <td class="text-end">
+            {% if r.estado == "EMITIDO" %}<a class="btn btn-sm btn-primary" href="{{ url_for('logistica.remito', remito_id=r.id) }}">Despachar</a>
+            {% elif r.estado == "EN_TRANSITO" %}<a class="btn btn-sm btn-primary" href="{{ url_for('logistica.remito', remito_id=r.id) }}">Recibir</a>
+            {% else %}<a class="btn btn-sm btn-light" href="{{ url_for('logistica.remito', remito_id=r.id) }}">Ver</a>{% endif %}
+          </td>
+        </tr>
+      {% else %}<tr><td colspan="9">{{ vacio("No hay remitos en este estado.", "truck") }}</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

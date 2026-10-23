@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% from "_macros.html" import selector, campo, estado, vacio %}
+{% set activo = "atencion.atencion" %}
+{% block titulo %}Orden de derivación{% endblock %}
+{% block subtitulo %}Proceso 3 · Atención #{{ consulta.id }} de {{ consulta.mascota }}{% endblock %}
+{% block acciones %}<a href="{{ url_for('atencion.atencion') }}" class="btn btn-light"><i class="bi bi-arrow-left"></i> Atención clínica</a>{% endblock %}
+{% block contenido %}
+<div class="row g-3">
+  <div class="col-xl-5">
+    <div class="card mb-3">
+      <div class="card-header"><i class="bi bi-clipboard2-pulse"></i>Atención</div>
+      <div class="card-body small">
+        <dl class="row mb-0">
+          <dt class="col-4 fw-normal text-body-secondary">Paciente</dt><dd class="col-8 fw-semibold">{{ consulta.mascota }} ({{ consulta.especie }})</dd>
+          <dt class="col-4 fw-normal text-body-secondary">Fecha</dt><dd class="col-8">{{ consulta.fecha_hora|fh }}</dd>
+          <dt class="col-4 fw-normal text-body-secondary">Clínica</dt><dd class="col-8">{{ consulta.clinica }}</dd>
+          <dt class="col-4 fw-normal text-body-secondary">Veterinario</dt><dd class="col-8">{{ consulta.veterinario }}</dd>
+          <dt class="col-4 fw-normal text-body-secondary">Motivo</dt><dd class="col-8">{{ consulta.motivo }}</dd>
+          <dt class="col-4 fw-normal text-body-secondary">Diagnóstico</dt><dd class="col-8">{{ consulta.diagnostico or "—" }}</dd>
+        </dl>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><i class="bi bi-droplet-half"></i>Muestras derivadas</div>
+      <ul class="list-group list-group-flush">
+        {% for m in muestras %}
+          <li class="list-group-item d-flex align-items-center gap-2">
+            <a href="{{ url_for('laboratorio.trazabilidad', codigo=m.codigo) }}" class="fw-semibold">{{ m.codigo }}</a>
+            <span class="small">{{ tipos[m.tipo_analisis_id].nombre }}</span>
+            <span class="ms-auto">{{ estado(m.estado) }}</span>
+          </li>
+        {% else %}<li class="list-group-item">{{ vacio("Todavía no hay órdenes para esta atención.", "eyedropper") }}</li>{% endfor %}
+      </ul>
+    </div>
+  </div>
+
+  <div class="col-xl-7">
+    <div class="card">
+      <div class="card-header"><i class="bi bi-file-earmark-medical"></i>Nueva orden al laboratorio central</div>
+      <div class="card-body">
+        <p class="small text-body-secondary">Se registra la extracción de una muestra por cada análisis. Cada análisis indica cómo conservar la muestra durante el transporte.</p>
+        <form method="post" class="row g-3">
+          <div class="col-12">
+            <div class="list-group">
+              {% for t in tipos.values() %}
+                <label class="list-group-item d-flex gap-3 align-items-center">
+                  <input class="form-check-input flex-shrink-0" type="checkbox" name="analisis" value="{{ t.id }}"
+                         {% if t.id in marcados %}checked{% endif %}>
+                  <span class="flex-grow-1"><span class="fw-semibold">{{ t.nombre }}</span>
+                    <span class="d-block small text-body-secondary">{{ t.tipo_muestra }} · {{ t.temp_min|num }} a {{ t.temp_max|num }} °C · viable {{ t.horas_viabilidad }} h</span></span>
+                  <span class="small text-nowrap">{{ t.precio|moneda }}</span>
+                </label>
+              {% endfor %}
+            </div>
+          </div>
+          {{ selector("prioridad", "Prioridad", prioridades, datos, col="col-md-4") }}
+          {{ campo("observaciones", "Observaciones", datos, col="col-md-8") }}
+          <div class="col-12"><button class="btn btn-primary"><i class="bi bi-send"></i> Emitir orden y registrar extracción</button></div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,59 @@
+{# Componentes reutilizables de formularios y tablas #}
+
+{% macro campo(nombre, etiqueta, datos, tipo="text", col="col-md-6", requerido=false, ayuda="", extra="") %}
+<div class="{{ col }}">
+  <label class="form-label" for="{{ nombre }}">{{ etiqueta }}{% if requerido %} <span class="text-danger">*</span>{% endif %}</label>
+  <input type="{{ tipo }}" class="form-control" id="{{ nombre }}" name="{{ nombre }}"
+         value="{{ datos.get(nombre, '') if datos else '' }}" {% if requerido %}required{% endif %} {{ extra|safe }}>
+  {% if ayuda %}<div class="form-text">{{ ayuda }}</div>{% endif %}
+</div>
+{% endmacro %}
+
+{% macro selector(nombre, etiqueta, opciones, datos, col="col-md-6", vacio=none, requerido=false, extra="") %}
+{# opciones: lista de (valor, texto) #}
+{% set actual = (datos.get(nombre, '') if datos else '')|string %}
+<div class="{{ col }}">
+  <label class="form-label" for="{{ nombre }}">{{ etiqueta }}{% if requerido %} <span class="text-danger">*</span>{% endif %}</label>
+  <select class="form-select" id="{{ nombre }}" name="{{ nombre }}" {% if requerido %}required{% endif %} {{ extra|safe }}>
+    {% if vacio is not none %}<option value="">{{ vacio }}</option>{% endif %}
+    {% for valor, texto in opciones %}
+      <option value="{{ valor }}" {% if valor|string == actual %}selected{% endif %}>{{ texto }}</option>
+    {% endfor %}
+  </select>
+</div>
+{% endmacro %}
+
+{% macro area(nombre, etiqueta, datos, col="col-12", filas=3, requerido=false) %}
+<div class="{{ col }}">
+  <label class="form-label" for="{{ nombre }}">{{ etiqueta }}{% if requerido %} <span class="text-danger">*</span>{% endif %}</label>
+  <textarea class="form-control" id="{{ nombre }}" name="{{ nombre }}" rows="{{ filas }}" {% if requerido %}required{% endif %}>{{ datos.get(nombre, '') if datos else '' }}</textarea>
+</div>
+{% endmacro %}
+
+{% macro estado(clave) %}
+{% set texto, color = ESTADOS.get(clave, (clave, "secondary")) %}
+<span class="badge rounded-pill text-bg-{{ color }} estado">{{ texto }}</span>
+{% endmacro %}
+
+{% macro vacio(mensaje, icono="inbox") %}
+<div class="vacio"><i class="bi bi-{{ icono }}"></i><div>{{ mensaje }}</div></div>
+{% endmacro %}
+
+{% macro kpi(icono, titulo, valor, color="primary", detalle="") %}
+<div class="card kpi h-100">
+  <div class="card-body d-flex align-items-center gap-3">
+    <div class="kpi-icono bg-{{ color }}-subtle text-{{ color }}"><i class="bi bi-{{ icono }}"></i></div>
+    <div>
+      <div class="text-body-secondary small">{{ titulo }}</div>
+      <div class="kpi-valor">{{ valor }}</div>
+      {% if detalle %}<div class="small text-body-secondary">{{ detalle }}</div>{% endif %}
+    </div>
+  </div>
+</div>
+{% endmacro %}
+
+{% macro boton_post(url, texto, clase="btn-outline-danger", icono="", confirmar="") %}
+<form method="post" action="{{ url }}" class="d-inline" {% if confirmar %}onsubmit="return confirm('{{ confirmar }}')"{% endif %}>
+  <button class="btn btn-sm {{ clase }}">{% if icono %}<i class="bi bi-{{ icono }}"></i> {% endif %}{{ texto }}</button>
+</form>
+{% endmacro %}

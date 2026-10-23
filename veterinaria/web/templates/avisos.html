@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% from "_macros.html" import vacio, boton_post %}
+{% set activo = "facturacion.avisos" %}
+{% block titulo %}Avisos a clientes{% endblock %}
+{% block subtitulo %}Recordatorios de vacunas, resultados listos y muestras rechazadas{% endblock %}
+{% block acciones %}
+  <form method="post" action="{{ url_for('facturacion.generar_recordatorios') }}">
+    <button class="btn btn-primary"><i class="bi bi-bell"></i> Generar recordatorios de vacunas</button>
+  </form>
+{% endblock %}
+{% block contenido %}
+<ul class="nav nav-pills mb-3 gap-1">
+  <li class="nav-item"><a class="nav-link {% if solo_pendientes %}active{% endif %}" href="{{ url_for('facturacion.avisos', pendientes=1) }}">Pendientes de envío</a></li>
+  <li class="nav-item"><a class="nav-link {% if not solo_pendientes %}active{% endif %}" href="{{ url_for('facturacion.avisos', pendientes=0) }}">Todos</a></li>
+</ul>
+{% set tipos = {"RESULTADO_LISTO": ("Resultado listo", "success", "clipboard2-check"),
+                "MUESTRA_RECHAZADA": ("Muestra rechazada", "danger", "x-octagon"),
+                "RECORDATORIO_VACUNA": ("Recordatorio de vacuna", "warning", "shield-plus")} %}
+<div class="card">
+  <div class="table-responsive tabla-scroll" style="max-height: 72vh">
+    <table class="table table-hover">
+      <thead><tr><th>Fecha</th><th>Tipo</th><th>Paciente</th><th>Destinatario</th><th>Mensaje</th><th></th></tr></thead>
+      <tbody>
+      {% for a in avisos %}
+        {% set texto, color, icono = tipos.get(a.tipo, (a.tipo, "secondary", "bell")) %}
+        <tr>
+          <td class="small text-nowrap">{{ a.fecha_hora|fh }}</td>
+          <td class="text-nowrap"><span class="badge text-bg-{{ color }}-subtle text-{{ color }}-emphasis"><i class="bi bi-{{ icono }}"></i> {{ texto }}</span></td>
+          <td>{{ a.mascota or "" }}</td><td class="small">{{ a.destinatario }}</td><td class="small">{{ a.mensaje }}</td>
+          <td class="text-end text-nowrap">{% if a.enviada %}<span class="text-success small"><i class="bi bi-check2-all"></i> Enviado</span>
+            {% else %}{{ boton_post(url_for('facturacion.marcar_enviado', aviso_id=a.id), "Marcar enviado", clase="btn-outline-success", icono="send") }}{% endif %}</td>
+        </tr>
+      {% else %}<tr><td colspan="6">{{ vacio("No hay avisos.", "bell-slash") }}</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

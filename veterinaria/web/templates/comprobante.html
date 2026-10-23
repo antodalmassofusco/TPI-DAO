@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% set activo = "facturacion.comprobantes" %}
+{% block titulo %}Comprobante {{ cp.numero }}{% endblock %}
+{% block subtitulo %}Comprobante de atención{% endblock %}
+{% block acciones %}
+  <a href="{{ url_for('facturacion.comprobantes') }}" class="btn btn-light"><i class="bi bi-arrow-left"></i> Comprobantes</a>
+  <button onclick="window.print()" class="btn btn-primary"><i class="bi bi-printer"></i> Imprimir</button>
+{% endblock %}
+{% block contenido %}
+<div class="card comprobante">
+  <div class="card-body p-4 p-md-5">
+    <div class="d-flex justify-content-between align-items-start mb-4">
+      <div>
+        <div class="h4 mb-0"><i class="bi bi-hospital text-primary"></i> {{ cp.clinica }}</div>
+        <div class="text-body-secondary small">{{ cp.direccion }} · Red VetRed</div>
+      </div>
+      <div class="text-end">
+        <div class="text-uppercase small text-body-secondary">Comprobante de atención</div>
+        <div class="h5 mb-0">N° {{ cp.numero }}</div>
+        <div class="small">{{ cp.fecha_hora|fh }}</div>
+      </div>
+    </div>
+    <div class="row g-3 mb-4 small">
+      <div class="col-sm-6 p-3 bg-body-tertiary rounded">
+        <div class="text-body-secondary">Cliente</div><div class="fw-semibold">{{ cp.cliente }}</div><div>DNI {{ cp.dni }}</div>
+      </div>
+      <div class="col-sm-6 p-3">
+        <div class="text-body-secondary">Paciente</div><div class="fw-semibold">{{ cp.mascota }} ({{ cp.especie }})</div>
+        <div>Atendido por {{ cp.veterinario }} el {{ cp.fecha_atencion|fh }}</div>
+      </div>
+    </div>
+    <table class="table">
+      <thead><tr><th>Concepto</th><th>Servicio</th><th class="text-center">Cant.</th><th class="text-end">Precio</th><th class="text-end">Subtotal</th></tr></thead>
+      <tbody>
+      {% for it in cp["items"] %}
+        <tr><td>{{ it.descripcion }}</td><td><span class="badge text-bg-light">{{ it.tipo_servicio|capitalize }}</span></td>
+          <td class="text-center">{{ it.cantidad }}</td><td class="text-end">{{ it.precio_unitario|moneda }}</td><td class="text-end">{{ it.subtotal|moneda }}</td></tr>
+      {% endfor %}
+      </tbody>
+      <tfoot><tr><th colspan="4" class="text-end border-0 pt-3">Total</th><th class="text-end border-0 pt-3 h5">{{ cp.total|moneda }}</th></tr></tfoot>
+    </table>
+    <p class="small text-body-secondary mb-0 mt-3">Los análisis de muestras rechazadas no se facturan.</p>
+  </div>
+</div>
+{% endblock %}
