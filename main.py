@@ -39,7 +39,7 @@ def main():
     app = crear_app()
     if "--sin-navegador" not in sys.argv:
         threading.Timer(1.0, abrir_navegador).start()
-    print(f"VetRed funcionando en {DIRECCION}  (Ctrl+C para detener)")
+    print(f"Huellitas funcionando en {DIRECCION}  (Ctrl+C para detener)")
     # Un único hilo: la conexión a SQLite (Singleton) nunca se usa en simultáneo
     app.run(host="127.0.0.1", port=5000, threaded=False, debug=False)
 

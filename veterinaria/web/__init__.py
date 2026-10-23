@@ -6,7 +6,7 @@ from veterinaria.web import util
 
 def crear_app() -> Flask:
     app = Flask(__name__)
-    app.secret_key = "vetred-tp-dao-2026"   # sólo firma los mensajes flash de la sesión
+    app.secret_key = "huellitas-tp-dao-2026"   # sólo firma los mensajes flash de la sesión
     util.registrar_filtros(app)
 
     from veterinaria.web.rutas import atencion, clientes, facturacion, inicio, laboratorio, logistica, reportes

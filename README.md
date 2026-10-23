@@ -1,4 +1,4 @@
-# VetRed — Red de Clínicas y Derivación de Laboratorio
+# Huellitas — Red de Clínicas y Derivación de Laboratorio
 
 TP Integrador 2026 · Desarrollo de Aplicaciones con Objetos · Tema 2
 
