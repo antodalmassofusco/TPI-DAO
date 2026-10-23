@@ -16,6 +16,18 @@ python -m unittest -v              # corre las pruebas (negocio + interfaz web)
 
 Para detener el servidor: `Ctrl + C` en la terminal.
 
+## Trabajo en grupo
+
+```bash
+git clone https://github.com/antodalmassofusco/TPI-DAO.git
+cd TPI-DAO
+pip install -r requirements.txt
+python main.py
+```
+
+La base `veterinaria.db` no se sube al repositorio: cada integrante la genera con `python main.py`, así nadie
+pisa los datos de otro. Antes de empezar a trabajar, `git pull`; al terminar, commit y `git push`.
+
 ## Estructura
 
 ```
