@@ -2,6 +2,9 @@
 
 TP Integrador 2026 · Desarrollo de Aplicaciones con Objetos · Tema 2
 
+**Documento explicativo** (modelo de dominio, ciclo de vida de la muestra, validaciones, patrones y reportes):
+[docs/Documento_explicativo_VetRed.pdf](docs/Documento_explicativo_VetRed.pdf)
+
 Aplicación web local en **Python 3.11 + Flask + Bootstrap 5 + SQLite**. Bootstrap, sus íconos y Chart.js
 están incluidos en el proyecto, así que funciona sin internet.
 
