@@ -1,4 +1,4 @@
-# Huellitas — Red de Clínicas y Derivación de Laboratorio
+# Huellitas - Red de clínicas y derivaciones de laboratorios
 
 TP Integrador 2026 · Desarrollo de Aplicaciones con Objetos · Tema 2
 
