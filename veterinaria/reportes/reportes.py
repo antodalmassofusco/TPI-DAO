@@ -51,7 +51,7 @@ class ReporteAtencionesDerivaciones(Reporte):
 
 class ReporteMuestrasRechazadas(Reporte):
     titulo = "Muestras rechazadas por fallas en el transporte"
-    descripcion = ("Detalle de muestras rechazadas en la recepción, causa (precinto roto, cadena de frío, "
+    descripcion = ("Detalle de muestras rechazadas al llegar al laboratorio, causa (precinto roto, cadena de frío, "
                    "viabilidad) y tasa de rechazo por transportista.")
     columnas = [("codigo", "Muestra"), ("fecha_rechazo", "Fecha rechazo"), ("clinica", "Clínica"),
                 ("analisis", "Análisis"), ("remito", "Remito"), ("transportista", "Transportista"),
@@ -64,6 +64,7 @@ class ReporteMuestrasRechazadas(Reporte):
                    re.numero AS remito, e.transportista, mu.motivo_rechazo
             FROM muestra mu
             JOIN historial_estado_muestra h ON h.muestra_id = mu.id AND h.estado_nuevo = 'RECHAZADA'
+                 AND h.estado_anterior = 'EN_TRANSITO'
             JOIN tipo_analisis ta ON ta.id = mu.tipo_analisis_id
             JOIN remito re ON re.id = mu.remito_id
             JOIN clinica cl ON cl.id = re.clinica_id
@@ -90,7 +91,9 @@ class ReporteMuestrasRechazadas(Reporte):
     def resumir(self, filas, f):
         totales = self.bd.consultar("""
             SELECT e.transportista, COUNT(mu.id) AS enviadas,
-                   SUM(mu.estado = 'RECHAZADA') AS rechazadas
+                   SUM(EXISTS (SELECT 1 FROM historial_estado_muestra h
+                               WHERE h.muestra_id = mu.id AND h.estado_nuevo = 'RECHAZADA'
+                                 AND h.estado_anterior = 'EN_TRANSITO')) AS rechazadas
             FROM envio e JOIN muestra mu ON mu.remito_id = e.remito_id
             WHERE e.fecha_llegada BETWEEN ? AND ?
             GROUP BY e.transportista ORDER BY rechazadas DESC""", (f["desde"], f["hasta_incl"]))
@@ -227,9 +230,10 @@ class ReporteFacturacion(Reporte):
 
 class ReporteTiemposMuestras(Reporte):
     titulo = "Tiempos de tránsito y procesamiento de muestras"
-    descripcion = ("Promedio de horas en tránsito (despacho → recepción), en procesamiento "
-                   "(recepción → resultado) y total, por clínica y tipo de análisis.")
-    columnas = [("clinica", "Clínica"), ("analisis", "Análisis"), ("muestras", "Muestras"),
+    descripcion = ("Promedio de horas en tránsito (despacho → llegada, incluye las rechazadas al llegar), "
+                   "en procesamiento (recepción → resultado) y total, por clínica y tipo de análisis.")
+    columnas = [("clinica", "Clínica"), ("analisis", "Análisis"), ("muestras", "Llegadas"),
+                ("analizadas", "Analizadas"),
                 ("h_espera", "Espera en clínica (h)"), ("h_transito", "Tránsito (h)"),
                 ("h_proceso", "Procesamiento (h)"), ("h_total", "Total extracción→resultado (h)")]
     grafico = ("etiqueta", "h_transito")
@@ -242,12 +246,16 @@ class ReporteTiemposMuestras(Reporte):
                        MAX(CASE WHEN h.estado_nuevo = 'EXTRAIDA'    THEN h.fecha_hora END) AS extraida,
                        MAX(CASE WHEN h.estado_nuevo = 'EN_TRANSITO' THEN h.fecha_hora END) AS despachada,
                        MAX(CASE WHEN h.estado_nuevo = 'RECIBIDA'    THEN h.fecha_hora END) AS recibida,
+                       MAX(CASE WHEN h.estado_nuevo = 'RECIBIDA' OR (h.estado_nuevo = 'RECHAZADA'
+                                     AND h.estado_anterior = 'EN_TRANSITO')
+                                THEN h.fecha_hora END) AS llegada,
                        MAX(CASE WHEN h.estado_nuevo = 'ANALIZADA'   THEN h.fecha_hora END) AS analizada
                 FROM historial_estado_muestra h GROUP BY h.muestra_id
             )
             SELECT cl.nombre AS clinica, ta.nombre AS analisis, COUNT(*) AS muestras,
+                   COUNT(hi.analizada) AS analizadas,
                    ROUND(AVG((julianday(hi.despachada) - julianday(hi.extraida)) * 24), 1) AS h_espera,
-                   ROUND(AVG((julianday(hi.recibida) - julianday(hi.despachada)) * 24), 1) AS h_transito,
+                   ROUND(AVG((julianday(hi.llegada) - julianday(hi.despachada)) * 24), 1) AS h_transito,
                    ROUND(AVG((julianday(hi.analizada) - julianday(hi.recibida)) * 24), 1) AS h_proceso,
                    ROUND(AVG((julianday(hi.analizada) - julianday(hi.extraida)) * 24), 1) AS h_total
             FROM hitos hi
@@ -256,7 +264,7 @@ class ReporteTiemposMuestras(Reporte):
             JOIN orden_derivacion o ON o.id = mu.orden_id
             JOIN consulta co ON co.id = o.consulta_id
             JOIN clinica cl ON cl.id = co.clinica_id
-            WHERE hi.analizada IS NOT NULL AND hi.analizada BETWEEN ? AND ?
+            WHERE hi.llegada BETWEEN ? AND ?
             GROUP BY cl.nombre, ta.nombre ORDER BY cl.nombre, h_total DESC""", (f["desde"], f["hasta_incl"]))
 
     def procesar(self, filas, f):
@@ -267,14 +275,20 @@ class ReporteTiemposMuestras(Reporte):
     def resumir(self, filas, f):
         n = sum(x["muestras"] for x in filas)
         if not n:
-            return ["No hay muestras analizadas en el período."]
+            return ["No hay muestras llegadas al laboratorio en el período."]
+        analizadas = sum(x["analizadas"] for x in filas)
 
-        def ponderado(clave):
-            return round(sum(x[clave] * x["muestras"] for x in filas) / n, 1)
+        def ponderado(clave, peso, total):
+            # Un grupo sin analizadas no tiene horas de procesamiento (queda en None)
+            if not total:
+                return 0
+            return round(sum(x[clave] * x[peso] for x in filas if x[clave] is not None) / total, 1)
 
         lenta = max(filas, key=lambda x: x["h_transito"])
-        return [f"Muestras analizadas: {n} — tránsito promedio {numero(ponderado('h_transito'), 1)} h, "
-                f"procesamiento promedio {numero(ponderado('h_proceso'), 1)} h, total {numero(ponderado('h_total'), 1)} h",
+        return [f"Muestras llegadas: {n} — tránsito promedio {numero(ponderado('h_transito', 'muestras', n), 1)} h",
+                f"Muestras analizadas: {analizadas} — "
+                f"procesamiento promedio {numero(ponderado('h_proceso', 'analizadas', analizadas), 1)} h, "
+                f"total {numero(ponderado('h_total', 'analizadas', analizadas), 1)} h",
                 f"Ruta con mayor tránsito: {lenta['clinica']} ({numero(lenta['h_transito'], 1)} h promedio)"]
 
 

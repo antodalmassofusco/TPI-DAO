@@ -77,6 +77,9 @@ class ConsultaService:
         if len(set(tipos_analisis_ids)) != len(tipos_analisis_ids):
             raise ValidacionError("Hay análisis repetidos en la orden.")
         consulta = self.repo.obtener_o_error(consulta_id)
+        if self.bd.escalar("SELECT 1 FROM comprobante WHERE consulta_id = ?", (consulta.id,)):
+            raise ValidacionError("La atención ya tiene comprobante: registre una nueva atención para derivar "
+                                  "análisis, porque estos no podrían facturarse.")
         fecha_hora = normalizar(fecha_hora or ahora())
         fecha_no_anterior(fecha_hora, consulta.fecha_hora, "la orden", "la consulta")
         laboratorio = CatalogoService(self.bd).laboratorio_central()

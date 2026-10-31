@@ -4,8 +4,8 @@ Patrón State: cada estado es una clase que decide qué operaciones admite. Una 
 no permitida (p. ej. analizar una muestra rechazada) lanza TransicionInvalidaError.
 
     EXTRAIDA ──empaquetar──▶ EMPAQUETADA ──despachar──▶ EN_TRANSITO ──recibir──▶ RECIBIDA ──analizar──▶ ANALIZADA
-        │                                                    │                     │
-        └──────────────────────rechazar──────────────────────┴─────────────────────┴──▶ RECHAZADA
+        │                          │                         │                     │
+        └────────rechazar──────────┴─────────────────────────┴─────────────────────┴──▶ RECHAZADA
 
 Patrón Observer: cada cambio de estado se notifica a los observadores registrados
 (bitácora inmutable de trazabilidad, avisos al cliente, etc.).
@@ -70,6 +70,11 @@ class Empaquetada(EstadoMuestra):
 
     def despachar(self, muestra, fecha_hora, detalle):
         muestra._transicionar(EnTransito, fecha_hora, detalle or "Despachada hacia el laboratorio central")
+
+    def rechazar(self, muestra, motivo, fecha_hora):
+        # Anulación del remito: abrir la conservadora precintada rompe la cadena de custodia
+        muestra.motivo_rechazo = motivo
+        muestra._transicionar(Rechazada, fecha_hora, motivo)
 
 
 class EnTransito(EstadoMuestra):

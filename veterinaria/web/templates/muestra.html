@@ -37,6 +37,20 @@
         {% endif %}
       </div>
     </div>
+    {% if t.muestra.estado == "RECIBIDA" %}
+      <div class="card mt-3">
+        <div class="card-header"><i class="bi bi-x-octagon"></i>Rechazar en el laboratorio</div>
+        <div class="card-body">
+          <form method="post" action="{{ url_for('laboratorio.rechazar', muestra_id=t.muestra.id) }}" class="row g-3"
+                onsubmit="return confirm('La muestra pasará a Muestra Rechazada y requerirá una nueva extracción. ¿Continuar?')">
+            {{ campo("profesional", "Profesional", datos, requerido=true) }}
+            {{ campo("fecha_hora", "Fecha y hora", {"fecha_hora": (datos.get("fecha_hora") or "")|input_fh}, tipo="datetime-local", requerido=true) }}
+            {{ campo("motivo", "Motivo (p. ej. muestra hemolizada)", datos, col="col-12", requerido=true) }}
+            <div class="col-12"><button class="btn btn-outline-danger"><i class="bi bi-x-octagon"></i> Rechazar muestra</button></div>
+          </form>
+        </div>
+      </div>
+    {% endif %}
   </div>
 </div>
 {% endblock %}

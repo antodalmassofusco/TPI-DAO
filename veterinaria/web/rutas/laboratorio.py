@@ -44,6 +44,15 @@ def registrar_resultado(muestra_id):
     return redirect(url_for(".resultados"))
 
 
+@bp.post("/muestras/<int:muestra_id>/rechazar")
+@validar(muestra)
+def rechazar(muestra_id):
+    f = request.form
+    LaboratorioService().rechazar(muestra_id, f.get("profesional", ""), f.get("motivo", ""), f.get("fecha_hora"))
+    flash("Muestra rechazada. Se generó un aviso al responsable de la mascota.", "warning")
+    return redirect(url_for(".resultados"))
+
+
 @bp.get("/trazabilidad")
 def trazabilidad():
     codigo = request.args.get("codigo", "").strip()

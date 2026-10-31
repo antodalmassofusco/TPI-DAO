@@ -8,7 +8,7 @@ from veterinaria.web.util import validar
 
 bp = Blueprint("logistica", __name__, url_prefix="/logistica")
 FILTROS_REMITO = {"EMITIDO": "Por despachar", "EN_TRANSITO": "En tránsito", "RECIBIDO": "Recibidos",
-                  "RECHAZADO": "Rechazados", "": "Todos"}
+                  "RECHAZADO": "Rechazados", "ANULADO": "Anulados", "": "Todos"}
 
 
 # ------------------------------------------------------------------ 4. Empaquetado
@@ -80,6 +80,15 @@ def despachar(remito_id):
     LogisticaService().despachar(remito_id, f.get("transportista", ""), f.get("temperatura"), f.get("vehiculo", ""),
                                  f.get("fecha_hora"))
     flash("Remito despachado: las muestras están en tránsito hacia el laboratorio central.", "success")
+    return redirect(url_for(".remito", remito_id=remito_id))
+
+
+@bp.post("/remitos/<int:remito_id>/anular")
+@validar(remito)
+def anular(remito_id):
+    f = request.form
+    muestras = LogisticaService().anular(remito_id, f.get("responsable", ""), f.get("motivo", ""), f.get("fecha_hora"))
+    flash(f"Remito anulado: {len(muestras)} muestra(s) rechazada(s) y conservadora disponible.", "warning")
     return redirect(url_for(".remito", remito_id=remito_id))
 
 

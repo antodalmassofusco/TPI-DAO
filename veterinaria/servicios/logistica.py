@@ -112,6 +112,33 @@ class LogisticaService:
                     descartadas.append(muestra)
         return descartadas
 
+    def anular(self, remito_id, responsable, motivo, fecha_hora=None):
+        """Anula un remito que no llegó a despacharse: se abre la conservadora, por lo que el precinto
+        queda roto y las muestras se rechazan (requieren nueva extracción). La conservadora se libera."""
+        fecha_hora = normalizar(fecha_hora or ahora())
+        if not responsable.strip():
+            raise ValidacionError("Indique quién anula el remito.")
+        if not motivo.strip():
+            raise ValidacionError("Indique el motivo de la anulación.")
+        remito = self.repo_remitos.obtener_o_error(remito_id)
+        fecha_no_anterior(fecha_hora, remito.fecha_emision, "anulación", "la emisión del remito")
+        repo_precintos = r.RepoPrecinto(self.bd)
+        with self.bd.transaccion():
+            remito.cambiar_estado("ANULADO")
+            self.repo_remitos.actualizar(remito)
+            precinto = repo_precintos.buscar_uno("remito_id = ?", (remito.id,))
+            precinto.verificar(False, fecha_hora, f"Abierto al anular el remito: {motivo.strip()}")
+            repo_precintos.actualizar(precinto)
+            muestras = self._muestras_de_remito(remito.id)
+            for muestra in muestras:
+                muestra.rechazar(f"Remito {remito.numero} anulado por {responsable.strip()}: {motivo.strip()}",
+                                 fecha_hora)
+                self.repo_muestras.actualizar(muestra)
+            contenedor = self.repo_contenedores.obtener(remito.contenedor_id)
+            contenedor.estado = "DISPONIBLE"
+            self.repo_contenedores.actualizar(contenedor)
+        return muestras
+
     # ------------------------------------------------------------------ 5. Cadena de envío
     def despachar(self, remito_id, transportista, temperatura_salida, vehiculo="", fecha_hora=None):
         fecha_hora = normalizar(fecha_hora or ahora())

@@ -52,6 +52,56 @@ class TestWeb(unittest.TestCase):
         html = self.post("/clientes", {"dni": "123", "nombre": "A", "apellido": "B"})
         self.assertIn("7 u 8 dígitos", html)
 
+    def test_cancelar_turno_ya_cancelado_no_rompe(self):
+        vet = self.bd.escalar("SELECT id FROM veterinario LIMIT 1")
+        self.bd.ejecutar("INSERT INTO turno (veterinario_id, mascota_id, inicio, fin, estado) "
+                         "VALUES (?, 1, '2030-03-01 10:00', '2030-03-01 10:30', 'CANCELADO')", (vet,))
+        turno = self.bd.escalar("SELECT MAX(id) FROM turno")
+        respuesta = self.web.post(f"/agenda/{turno}/cancelar", follow_redirects=True)
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertIn("Sólo se pueden cancelar", respuesta.get_data(as_text=True))
+
+    def _muestra_empaquetada(self):
+        fecha = ahora()
+        vet = self.bd.consultar_uno("SELECT id, clinica_id FROM veterinario LIMIT 1")
+        html = self.post("/atencion", {"mascota_id": 1, "veterinario_id": vet["id"], "tipo": "CONSULTA",
+                                       "fecha_hora": fecha.replace(" ", "T"), "motivo": "Control web", "derivar": "1"})
+        consulta_id = int(re.search(r"Atención #(\d+) registrada", html).group(1))
+        analisis = self.bd.escalar("SELECT id FROM tipo_analisis WHERE nombre = 'Hemograma completo'")
+        html = self.post(f"/atencion/{consulta_id}/orden", {"analisis": analisis, "prioridad": "NORMAL"})
+        codigo = re.search(r"Muestras extraídas: (M-\d+)", html).group(1)
+        muestra_id = self.bd.escalar("SELECT id FROM muestra WHERE codigo = ?", (codigo,))
+        contenedor = self.bd.escalar(
+            "SELECT id FROM contenedor WHERE clinica_id = ? AND estado = 'DISPONIBLE' AND temp_max <= 8", (vet["clinica_id"],))
+        self.post("/logistica/empaquetado", {"clinica": vet["clinica_id"], "muestras": muestra_id,
+                                             "contenedor_id": contenedor, "responsable": "Enf. Web", "fecha_hora": fecha})
+        remito_id = self.bd.escalar("SELECT remito_id FROM muestra WHERE id = ?", (muestra_id,))
+        return muestra_id, remito_id, contenedor, fecha
+
+    def test_anular_remito_desde_la_web(self):
+        muestra_id, remito_id, contenedor, fecha = self._muestra_empaquetada()
+        self.assertIn("Anular remito", self.ok(f"/logistica/remitos/{remito_id}"))
+        html = self.post(f"/logistica/remitos/{remito_id}/anular", {"responsable": "", "motivo": "", "fecha_hora": fecha})
+        self.assertIn("Indique quién anula", html)
+        html = self.post(f"/logistica/remitos/{remito_id}/anular",
+                         {"responsable": "Enf. Web", "motivo": "Se canceló el retiro", "fecha_hora": fecha})
+        self.assertIn("Remito anulado", html)
+        self.assertEqual(self.bd.escalar("SELECT estado FROM muestra WHERE id = ?", (muestra_id,)), "RECHAZADA")
+        self.assertEqual(self.bd.escalar("SELECT estado FROM contenedor WHERE id = ?", (contenedor,)), "DISPONIBLE")
+        self.ok("/logistica/remitos?estado=ANULADO")
+
+    def test_rechazar_muestra_desde_la_web(self):
+        muestra_id, remito_id, _, fecha = self._muestra_empaquetada()
+        self.post(f"/logistica/remitos/{remito_id}/despachar",
+                  {"transportista": "Moto Web", "temperatura": "5", "fecha_hora": fecha})
+        self.post(f"/logistica/remitos/{remito_id}/recibir",
+                  {"precinto": "INTACTO", "recibido_por": "Bioq. Web", "temperatura": "5", "fecha_hora": fecha})
+        self.assertIn("Rechazar muestra", self.ok(f"/laboratorio/muestras/{muestra_id}"))
+        html = self.post(f"/laboratorio/muestras/{muestra_id}/rechazar",
+                         {"profesional": "Bioq. Web", "motivo": "Hemolizada", "fecha_hora": fecha})
+        self.assertIn("Muestra rechazada", html)
+        self.assertNotIn("Rechazar muestra", self.ok(f"/laboratorio/muestras/{muestra_id}"))
+
     def test_circuito_completo_de_una_muestra(self):
         fecha = ahora()
         vet = self.bd.consultar_uno("SELECT id, clinica_id FROM veterinario LIMIT 1")

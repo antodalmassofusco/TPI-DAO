@@ -45,8 +45,12 @@ def reservar():
     return redirect(url_for(".agenda", fecha=turno.inicio[:10]))
 
 
+def _agenda_tras_cancelar(turno_id, datos):
+    return agenda()
+
+
 @bp.post("/agenda/<int:turno_id>/cancelar")
-@validar(agenda)
+@validar(_agenda_tras_cancelar)
 def cancelar(turno_id):
     TurnoService().cancelar(turno_id)
     flash("Turno cancelado.", "success")

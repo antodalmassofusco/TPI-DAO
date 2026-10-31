@@ -151,7 +151,7 @@ CREATE TABLE IF NOT EXISTS remito (
     fecha_emision  TEXT NOT NULL,
     responsable    TEXT NOT NULL,
     estado         TEXT NOT NULL DEFAULT 'EMITIDO'
-                   CHECK (estado IN ('EMITIDO', 'EN_TRANSITO', 'RECIBIDO', 'RECHAZADO'))
+                   CHECK (estado IN ('EMITIDO', 'EN_TRANSITO', 'RECIBIDO', 'RECHAZADO', 'ANULADO'))
 );
 
 CREATE TABLE IF NOT EXISTS precinto (

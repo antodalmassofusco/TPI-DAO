@@ -69,8 +69,12 @@ tests/
 | 6 | Recepción y verificación del precinto | Remitos y envíos → detalle del remito | `LogisticaService.recibir` |
 | 7 | Resultados y comprobantes | Resultados · Comprobantes | `LaboratorioService`, `ComprobanteService` |
 
-Opcionales implementados: agenda de turnos, recordatorios de vacunas y avisos de resultados (página Avisos)
-y control de disponibilidad de conservadoras.
+Además, un remito sin despachar se puede anular (`LogisticaService.anular`) y el laboratorio puede rechazar una
+muestra recibida (`LaboratorioService.rechazar`). Si ya tenías una `veterinaria.db`, regenerala con
+`python main.py --datos-prueba`: el estado `ANULADO` requiere el esquema nuevo.
+
+Opcional implementado: recordatorios de vacunas y avisos de resultados (página Avisos). También se controla
+la disponibilidad de las conservadoras, sin llegar a un stock de insumos.
 
 ## Patrones de diseño
 

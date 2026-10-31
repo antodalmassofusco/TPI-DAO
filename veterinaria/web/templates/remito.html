@@ -76,6 +76,19 @@
           </form>
         </div>
       </div>
+      <div class="card mt-3">
+        <div class="card-header"><i class="bi bi-x-circle"></i>Anular remito</div>
+        <div class="card-body">
+          <p class="small text-body-secondary">Si no va a despacharse, se abre la conservadora: el precinto queda roto, las muestras pasan a Muestra Rechazada y la conservadora vuelve a estar disponible.</p>
+          <form method="post" action="{{ url_for('logistica.anular', remito_id=r.id) }}" class="row g-3"
+                onsubmit="return confirm('TODAS las muestras del remito pasarán a Muestra Rechazada. ¿Continuar?')">
+            {{ campo("responsable", "Responsable", datos, requerido=true) }}
+            {{ campo("fecha_hora", "Fecha y hora", {"fecha_hora": (datos.get("fecha_hora") or ahora)|input_fh}, tipo="datetime-local", requerido=true) }}
+            {{ campo("motivo", "Motivo", datos, col="col-12", requerido=true) }}
+            <div class="col-12"><button class="btn btn-outline-danger"><i class="bi bi-x-circle"></i> Anular remito</button></div>
+          </form>
+        </div>
+      </div>
     {% elif r.estado == "EN_TRANSITO" %}
       {% set d_control = datos if formulario == "control" else {} %}
       {% set d_recibir = datos if formulario == "recibir" else {} %}
@@ -121,7 +134,7 @@
       <div class="card">
         <div class="card-body text-center py-5">
           <i class="bi bi-{{ 'check-circle text-success' if r.estado == 'RECIBIDO' else 'x-octagon text-danger' }}" style="font-size: 3rem"></i>
-          <h2 class="h5 mt-2">Remito {{ "recibido" if r.estado == "RECIBIDO" else "rechazado" }}</h2>
+          <h2 class="h5 mt-2">Remito {{ {"RECIBIDO": "recibido", "RECHAZADO": "rechazado", "ANULADO": "anulado"}[r.estado] }}</h2>
           <p class="text-body-secondary mb-3">La cadena de custodia de este remito está cerrada.
             {% if r.estado == "RECIBIDO" %}Las muestras aceptadas ya pueden analizarse.{% endif %}</p>
           <a class="btn btn-outline-primary" href="{{ url_for('laboratorio.resultados') }}"><i class="bi bi-eyedropper"></i> Ir a resultados</a>

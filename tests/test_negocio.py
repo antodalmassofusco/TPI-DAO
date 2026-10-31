@@ -10,7 +10,7 @@ from veterinaria.dominio.muestra import Muestra
 from veterinaria.excepciones import TransicionInvalidaError, ValidacionError
 from veterinaria.persistencia import repositorios as r
 from veterinaria.persistencia.conexion import BaseDatos
-from veterinaria.reportes.reportes import REPORTES
+from veterinaria.reportes.reportes import REPORTES, ReporteMuestrasRechazadas, ReporteTiemposMuestras
 from veterinaria.servicios.catalogos import CatalogoService
 from veterinaria.servicios.clientes import ClienteService
 from veterinaria.servicios.comprobantes import ComprobanteService
@@ -133,6 +133,40 @@ class TestCicloDeVidaMuestra(BaseTest):
         with self.assertRaises(ValidacionError):
             self.bd.ejecutar("DELETE FROM historial_estado_muestra")
 
+    def test_rechazo_en_laboratorio(self):
+        consulta, muestra, remito = self._muestra_en_transito()
+        self.logistica.recibir(remito.id, "Bioq. Sosa", True, 5, fecha_hora=fh(0, 5))
+        self.lab.rechazar(muestra.id, "Bioq. Sosa", "Hemolizada", fh(0, 6))
+        self.assertEqual(r.RepoMuestra(self.bd).obtener(muestra.id).estado, "RECHAZADA")
+        with self.assertRaises(TransicionInvalidaError):
+            self.lab.registrar_resultado(muestra.id, "Bioq. Sosa", "x", "x", fecha_hora=fh(0, 7))
+        with self.assertRaises(ValidacionError):
+            self.lab.rechazar(muestra.id, "Bioq. Sosa", "Otra vez", fh(0, 7))
+        # no es una falla del transporte
+        desde, hasta = fh(-10)[:10], fh(10)[:10]
+        self.assertEqual(ReporteMuestrasRechazadas(self.bd).generar(desde=desde, hasta=hasta).filas, [])
+
+    def test_anular_remito_libera_conservadora(self):
+        consulta, _ = self.consultas.registrar(self.mascota.id, self.vet.id, "CONSULTA", "x", fecha_hora=fh(0))
+        _, muestras = self.consultas.emitir_orden(consulta.id, [self.hemograma.id], fecha_hora=fh(0))
+        remito, _ = self.logistica.empaquetar(self.conservadora.id, [muestras[0].id], "Enf.", fecha_hora=fh(0, 1))
+        self.logistica.anular(remito.id, "Enf. Ruiz", "Se canceló el retiro", fh(0, 2))
+        self.assertEqual(r.RepoRemito(self.bd).obtener(remito.id).estado, "ANULADO")
+        self.assertEqual(r.RepoPrecinto(self.bd).buscar_uno("remito_id = ?", (remito.id,)).estado, "ROTO")
+        self.assertEqual(r.RepoMuestra(self.bd).obtener(muestras[0].id).estado, "RECHAZADA")
+        self.assertEqual(r.RepoContenedor(self.bd).obtener(self.conservadora.id).estado, "DISPONIBLE")
+
+    def test_no_se_anula_remito_despachado(self):
+        _, _, remito = self._muestra_en_transito()
+        with self.assertRaises(TransicionInvalidaError):
+            self.logistica.anular(remito.id, "Enf. Ruiz", "Tarde", fh(0, 4))
+
+    def test_orden_posterior_al_comprobante(self):
+        consulta, _ = self.consultas.registrar(self.mascota.id, self.vet.id, "CONSULTA", "x", fecha_hora=fh(0))
+        ComprobanteService(self.bd).emitir(consulta.id, fh(0, 1))
+        with self.assertRaises(ValidacionError):
+            self.consultas.emitir_orden(consulta.id, [self.hemograma.id], fecha_hora=fh(0, 2))
+
     def test_transicion_invalida_en_dominio(self):
         m = Muestra("M-X", 1, 1, fh(0))
         with self.assertRaises(TransicionInvalidaError):
@@ -162,6 +196,14 @@ class TestReportes(BaseTest):
             self.assertIsInstance(resultado.filas, list, clase.__name__)
         tiempos = REPORTES[-1](self.bd).generar(desde=fh(-10)[:10], hasta=fh(10)[:10])
         self.assertEqual(tiempos.filas[0]["h_transito"], 2.0)
+
+    def test_tiempos_incluyen_rechazadas_al_llegar(self):
+        _, _, remito = self._muestra_en_transito()
+        self.logistica.recibir(remito.id, "Bioq. Sosa", False, 5, fecha_hora=fh(0, 7))
+        reporte = ReporteTiemposMuestras(self.bd).generar(desde=fh(-10)[:10], hasta=fh(10)[:10])
+        self.assertEqual(reporte.filas[0]["h_transito"], 4.0)
+        self.assertEqual(reporte.filas[0]["analizadas"], 0)
+        self.assertIsNone(reporte.filas[0]["h_proceso"])
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 """Registro de resultados y consulta de trazabilidad de muestras."""
 from veterinaria.dominio.entidades import Resultado
 from veterinaria.dominio.muestra import ETIQUETAS_ESTADO
-from veterinaria.excepciones import EntidadNoEncontradaError
+from veterinaria.excepciones import EntidadNoEncontradaError, ValidacionError
 from veterinaria.persistencia.conexion import BaseDatos
 from veterinaria.persistencia import repositorios as r
 from veterinaria.servicios.observadores import AvisoAlCliente, RegistroTrazabilidad
@@ -27,6 +27,24 @@ class LaboratorioService:
             self.repo_muestras.actualizar(muestra)
             r.RepoResultado(self.bd).insertar(resultado)
         return resultado
+
+    def rechazar(self, muestra_id, profesional, motivo, fecha_hora=None):
+        """Rechazo durante el procesamiento (p. ej. muestra hemolizada o volumen insuficiente)."""
+        fecha_hora = normalizar(fecha_hora or ahora())
+        if not profesional.strip():
+            raise ValidacionError("Indique el profesional que rechaza la muestra.")
+        if not motivo.strip():
+            raise ValidacionError("Indique el motivo del rechazo.")
+        muestra = self.repo_muestras.obtener_o_error(muestra_id)
+        if muestra.estado != "RECIBIDA":
+            raise ValidacionError(f"Sólo se pueden rechazar en el laboratorio muestras recibidas "
+                                  f"(estado actual: {ETIQUETAS_ESTADO[muestra.estado]}).")
+        muestra.agregar_observador(RegistroTrazabilidad(self.bd))
+        muestra.agregar_observador(AvisoAlCliente(self.bd))
+        with self.bd.transaccion():
+            muestra.rechazar(f"Rechazada en laboratorio por {profesional.strip()}: {motivo.strip()}", fecha_hora)
+            self.repo_muestras.actualizar(muestra)
+        return muestra
 
     def muestras(self, estados=None):
         condicion, parametros = "", []

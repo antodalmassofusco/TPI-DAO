@@ -270,10 +270,11 @@ class Remito:
     id: Optional[int] = None
 
     TRANSICIONES = {
-        "EMITIDO": {"EN_TRANSITO"},
+        "EMITIDO": {"EN_TRANSITO", "ANULADO"},
         "EN_TRANSITO": {"RECIBIDO", "RECHAZADO"},
         "RECIBIDO": set(),
         "RECHAZADO": set(),
+        "ANULADO": set(),
     }
 
     def __post_init__(self):

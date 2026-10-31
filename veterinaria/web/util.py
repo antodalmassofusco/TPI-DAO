@@ -17,6 +17,7 @@ ESTADOS = {
     "EMITIDO": ("Emitido", "secondary"),
     "RECIBIDO": ("Recibido", "success"),
     "RECHAZADO": ("Rechazado", "danger"),
+    "ANULADO": ("Anulado", "secondary"),
     "PENDIENTE": ("Pendiente", "warning"),
     "ATENDIDO": ("Atendido", "success"),
     "CANCELADO": ("Cancelado", "secondary"),
