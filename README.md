@@ -2,8 +2,8 @@
 
 TP Integrador 2026 · Desarrollo de Aplicaciones con Objetos · Tema 2
 
-**Documento explicativo** (modelo de dominio, diagrama de clases, DER, ciclo de vida de la muestra, validaciones,
-patrones y reportes): [docs/Documento_explicativo_Huellitas.pdf](docs/Documento_explicativo_Huellitas.pdf)
+**Documento explicativo** (casos de uso, modelo de dominio, diagramas de clases, DER, ciclos de vida de la muestra y
+del remito, validaciones, patrones y reportes): [docs/Documento_explicativo_Huellitas.pdf](docs/Documento_explicativo_Huellitas.pdf)
 
 Aplicación web local en **Python 3.11 + Flask + Bootstrap 5 + SQLite**. Bootstrap, sus íconos y Chart.js
 están incluidos en el proyecto, así que funciona sin internet.
@@ -14,10 +14,13 @@ están incluidos en el proyecto, así que funciona sin internet.
 pip install -r requirements.txt    # sólo la primera vez (instala Flask)
 python main.py                     # levanta el servidor y abre http://127.0.0.1:5000
 python main.py --datos-prueba      # regenera la base de demostración y abre la app
-python -m unittest -v              # corre las pruebas (negocio + interfaz web)
+python -m unittest -v              # corre las 42 pruebas (negocio + interfaz web)
 ```
 
 Para detener el servidor: `Ctrl + C` en la terminal.
+
+En Windows, si `python` o `pip` no se reconocen, usar el lanzador `py`: `py -m pip install -r requirements.txt`,
+`py main.py`, `py -m unittest -v`.
 
 ## Trabajo en grupo
 
@@ -42,8 +45,9 @@ veterinaria/
   dominio/
     entidades.py        entidades con sus invariantes (Cliente, Mascota, Remito, Precinto, ...)
     muestra.py          ciclo de vida de la muestra: patrones State + Observer
+    remito.py           ciclo de vida del remito biológico: patrones State + Observer
   persistencia/
-    esquema.sql         tablas, restricciones y triggers de inmutabilidad
+    esquema.sql         tablas, restricciones y triggers de inmutabilidad (bitácoras de muestra y remito)
     conexion.py         conexión única a SQLite: patrón Singleton + transacciones anidables
     repositorios.py     patrón Repository (repositorio genérico por entidad)
   servicios/            lógica de negocio de cada proceso
@@ -71,15 +75,21 @@ tests/
 
 Además, un remito sin despachar se puede anular (`LogisticaService.anular`) y el laboratorio puede rechazar una
 muestra recibida (`LaboratorioService.rechazar`). Si ya tenías una `veterinaria.db`, regenerala con
-`python main.py --datos-prueba`: el estado `ANULADO` requiere el esquema nuevo.
+`python main.py --datos-prueba`: la bitácora del remito y sus triggers requieren el esquema nuevo.
 
 Opcional implementado: recordatorios de vacunas y avisos de resultados (página Avisos). También se controla
 la disponibilidad de las conservadoras, sin llegar a un stock de insumos.
 
 ## Patrones de diseño
 
-- **State**: `dominio/muestra.py`. Cada estado de la muestra es una clase que decide qué operaciones admite.
-- **Observer**: cada cambio de estado de la muestra se notifica a `RegistroTrazabilidad` (bitácora) y a `AvisoAlCliente`.
+- **State**: `dominio/muestra.py` y `dominio/remito.py`. Cada estado de la muestra y del remito es una clase que decide
+  qué operaciones admite.
+- **Observer**: cada cambio de estado de la muestra se notifica a `RegistroTrazabilidad` (bitácora) y a `AvisoAlCliente`;
+  cada cambio del remito, a `RegistroTrazabilidadRemito`.
 - **Template Method**: `reportes/base.py`, `Reporte.generar()`.
 - **Singleton**: `persistencia/conexion.py`, `BaseDatos`.
 - **Repository**: `persistencia/repositorios.py`.
+
+La justificación de cada patrón, y de por qué no se aplicaron en otros lugares, está en la sección 7 del documento.
+
+Consigna del tema: [docs/consigna_tema2.pdf](docs/consigna_tema2.pdf)
