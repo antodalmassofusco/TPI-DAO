@@ -68,6 +68,7 @@ def remito(remito_id, datos=None):
     if not filas:
         abort(404)
     return render_template("remito.html", r=filas[0], eventos=servicio.eventos_de_remito(remito_id),
+                           historial=servicio.historial_de_remito(remito_id),
                            muestras=servicio.muestras_de_remito(remito_id), ahora=ahora(),
                            datos=datos or {}, formulario=request.form.get("formulario", ""))
 

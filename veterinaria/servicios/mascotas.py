@@ -30,10 +30,17 @@ class MascotaService:
         self._validar_responsable(mascota.cliente_id)
         return self.repo.actualizar(mascota)
 
-    def baja(self, mascota_id):
+    def baja(self, mascota_id) -> int:
+        """Baja lógica. Sus turnos pendientes se cancelan para liberar la agenda.
+        Devuelve la cantidad de turnos cancelados."""
         mascota = self.repo.obtener_o_error(mascota_id)
-        mascota.activo = False
-        self.repo.actualizar(mascota)
+        with self.bd.transaccion():
+            mascota.activo = False
+            self.repo.actualizar(mascota)
+            cursor = self.bd.ejecutar(
+                "UPDATE turno SET estado = 'CANCELADO' WHERE mascota_id = ? AND estado = 'PENDIENTE'",
+                (mascota.id,))
+        return cursor.rowcount
 
     def obtener(self, mascota_id) -> Mascota:
         return self.repo.obtener_o_error(mascota_id)

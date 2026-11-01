@@ -40,6 +40,23 @@
       </ul>
     </div>
 
+    <div class="card mb-3">
+      <div class="card-header"><i class="bi bi-clock-history"></i>Estados del remito <span class="small text-body-secondary">(bitácora inmutable)</span></div>
+      <ul class="list-group list-group-flush">
+        {% for h in historial %}
+          <li class="list-group-item small">
+            <div class="d-flex align-items-center gap-2">
+              <span class="text-body-secondary">{{ h.estado_anterior }}</span><i class="bi bi-arrow-right"></i>{{ estado(h.estado_nuevo_clave) }}
+              <span class="ms-auto text-body-secondary">{{ h.fecha_hora|fh }}</span>
+            </div>
+            {% if h.detalle %}<div class="text-body-secondary mt-1">{{ h.detalle }}</div>{% endif %}
+          </li>
+        {% else %}
+          <li class="list-group-item small text-body-secondary">Sin movimientos registrados.</li>
+        {% endfor %}
+      </ul>
+    </div>
+
     <div class="card">
       <div class="card-header"><i class="bi bi-signpost-split"></i>Cadena de envío</div>
       <div class="card-body">

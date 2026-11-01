@@ -1,8 +1,9 @@
 """Observadores concretos de los cambios de estado de una muestra (patrón Observer)."""
-from veterinaria.dominio.entidades import HistorialEstado, Notificacion
+from veterinaria.dominio.entidades import HistorialEstado, HistorialEstadoRemito, Notificacion
 from veterinaria.dominio.muestra import ObservadorMuestra
+from veterinaria.dominio.remito import ObservadorRemito
 from veterinaria.excepciones import ValidacionError
-from veterinaria.persistencia.repositorios import RepoHistorial, RepoNotificacion
+from veterinaria.persistencia.repositorios import RepoHistorial, RepoHistorialRemito, RepoNotificacion
 
 
 class RegistroTrazabilidad(ObservadorMuestra):
@@ -19,6 +20,23 @@ class RegistroTrazabilidad(ObservadorMuestra):
                 f"La fecha {fecha_hora} es anterior al último movimiento de la muestra {muestra.codigo} ({ultimo}).")
         self.repo.insertar(HistorialEstado(
             muestra_id=muestra.id, estado_anterior=anterior, estado_nuevo=nuevo,
+            fecha_hora=fecha_hora, detalle=detalle))
+
+
+class RegistroTrazabilidadRemito(ObservadorRemito):
+    """Asienta cada cambio de estado del remito biológico en su bitácora inmutable."""
+
+    def __init__(self, bd):
+        self.repo = RepoHistorialRemito(bd)
+
+    def estado_cambiado(self, remito, anterior, nuevo, fecha_hora, detalle):
+        ultimo = self.repo.bd.escalar(
+            "SELECT MAX(fecha_hora) FROM historial_estado_remito WHERE remito_id = ?", (remito.id,))
+        if ultimo and fecha_hora < ultimo:
+            raise ValidacionError(
+                f"La fecha {fecha_hora} es anterior al último movimiento del remito {remito.numero} ({ultimo}).")
+        self.repo.insertar(HistorialEstadoRemito(
+            remito_id=remito.id, estado_anterior=anterior, estado_nuevo=nuevo,
             fecha_hora=fecha_hora, detalle=detalle))
 
 

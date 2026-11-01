@@ -1,12 +1,13 @@
 """Cadena de custodia: empaquetado, envío y recepción de muestras en el laboratorio central."""
 from veterinaria.dominio.entidades import (Envio, EventoEnvio, Precinto, Recepcion, Remito,
-                                           fecha_no_anterior)
+                                           fecha_no_anterior, fecha_no_futura)
 from veterinaria.dominio.muestra import ETIQUETAS_ESTADO, Muestra
+from veterinaria.dominio.remito import ETIQUETAS_ESTADO_REMITO
 from veterinaria.excepciones import ValidacionError
 from veterinaria.persistencia.conexion import BaseDatos
 from veterinaria.persistencia import repositorios as r
 from veterinaria.servicios.catalogos import CatalogoService
-from veterinaria.servicios.observadores import AvisoAlCliente, RegistroTrazabilidad
+from veterinaria.servicios.observadores import AvisoAlCliente, RegistroTrazabilidad, RegistroTrazabilidadRemito
 from veterinaria.utils.fechas import ahora, horas_entre, normalizar
 
 MOTIVO_PRECINTO = "Precinto sanitario roto: cadena de custodia comprometida"
@@ -25,6 +26,11 @@ class LogisticaService:
         muestra.agregar_observador(RegistroTrazabilidad(self.bd))
         muestra.agregar_observador(AvisoAlCliente(self.bd))
         return muestra
+
+    def _remito(self, remito_id) -> Remito:
+        remito = self.repo_remitos.obtener_o_error(remito_id)
+        remito.agregar_observador(RegistroTrazabilidadRemito(self.bd))
+        return remito
 
     def _muestras_de_remito(self, remito_id):
         return [self._con_observadores(m) for m in self.repo_muestras.listar("remito_id = ?", (remito_id,))]
@@ -50,6 +56,9 @@ class LogisticaService:
         fecha_hora = normalizar(fecha_hora or ahora())
         if not muestra_ids:
             raise ValidacionError("Seleccione al menos una muestra para empaquetar.")
+        if len(set(muestra_ids)) != len(muestra_ids):
+            raise ValidacionError("Hay muestras repetidas en el empaquetado.")
+        fecha_no_futura(fecha_hora, "empaquetado")
         if not contenedor_id:
             raise ValidacionError("Seleccione la conservadora isotérmica.")
         contenedor = self.repo_contenedores.obtener_o_error(contenedor_id)
@@ -85,6 +94,8 @@ class LogisticaService:
                 numero=self.bd.siguiente_numero("remito", "RB-"), clinica_id=contenedor.clinica_id,
                 laboratorio_id=laboratorio.id, contenedor_id=contenedor.id,
                 fecha_emision=fecha_hora, responsable=responsable))
+            remito.agregar_observador(RegistroTrazabilidadRemito(self.bd))
+            remito.registrar_emision()
             precinto = r.RepoPrecinto(self.bd).insertar(Precinto(
                 codigo=self.bd.siguiente_numero("precinto", "PS-"), remito_id=remito.id,
                 fecha_colocacion=fecha_hora))
@@ -98,6 +109,7 @@ class LogisticaService:
     def descartar_vencidas(self, clinica_id, fecha_hora=None) -> list:
         """Rechaza las muestras extraídas que superaron su ventana de viabilidad sin ser enviadas."""
         fecha_hora = normalizar(fecha_hora or ahora())
+        fecha_no_futura(fecha_hora, "descarte")
         repo_tipos = r.RepoTipoAnalisis(self.bd)
         descartadas = []
         with self.bd.transaccion():
@@ -120,11 +132,12 @@ class LogisticaService:
             raise ValidacionError("Indique quién anula el remito.")
         if not motivo.strip():
             raise ValidacionError("Indique el motivo de la anulación.")
-        remito = self.repo_remitos.obtener_o_error(remito_id)
+        remito = self._remito(remito_id)
+        fecha_no_futura(fecha_hora, "anulación")
         fecha_no_anterior(fecha_hora, remito.fecha_emision, "anulación", "la emisión del remito")
         repo_precintos = r.RepoPrecinto(self.bd)
         with self.bd.transaccion():
-            remito.cambiar_estado("ANULADO")
+            remito.anular(fecha_hora, f"Anulado por {responsable.strip()}: {motivo.strip()}")
             self.repo_remitos.actualizar(remito)
             precinto = repo_precintos.buscar_uno("remito_id = ?", (remito.id,))
             precinto.verificar(False, fecha_hora, f"Abierto al anular el remito: {motivo.strip()}")
@@ -142,11 +155,12 @@ class LogisticaService:
     # ------------------------------------------------------------------ 5. Cadena de envío
     def despachar(self, remito_id, transportista, temperatura_salida, vehiculo="", fecha_hora=None):
         fecha_hora = normalizar(fecha_hora or ahora())
-        remito = self.repo_remitos.obtener_o_error(remito_id)
+        remito = self._remito(remito_id)
+        fecha_no_futura(fecha_hora, "salida")
         fecha_no_anterior(fecha_hora, remito.fecha_emision, "salida", "la emisión del remito")
         clinica = r.RepoClinica(self.bd).obtener(remito.clinica_id)
         with self.bd.transaccion():
-            remito.cambiar_estado("EN_TRANSITO")
+            remito.despachar(fecha_hora, f"Despachado con {transportista} {vehiculo}".strip())
             self.repo_remitos.actualizar(remito)
             envio = self.repo_envios.insertar(Envio(
                 remito_id=remito.id, transportista=transportista, vehiculo=vehiculo, fecha_salida=fecha_hora))
@@ -163,9 +177,10 @@ class LogisticaService:
                                 fecha_hora=None) -> EventoEnvio:
         fecha_hora = normalizar(fecha_hora or ahora())
         remito = self.repo_remitos.obtener_o_error(remito_id)
-        if remito.estado != "EN_TRANSITO":
+        if not remito.estado_actual.en_ruta:
             raise ValidacionError(f"El remito {remito.numero} no está en tránsito.")
         envio = self._envio_de(remito.id)
+        fecha_no_futura(fecha_hora, "el control")
         fecha_no_anterior(fecha_hora, self._ultimo_evento(envio.id), "el control", "el evento anterior")
         return self.repo_eventos.insertar(EventoEnvio(
             envio_id=envio.id, fecha_hora=fecha_hora, tipo="PUNTO_CONTROL", ubicacion=ubicacion,
@@ -180,10 +195,11 @@ class LogisticaService:
         Devuelve (recepcion, [(muestra, motivo_rechazo | None), ...]).
         """
         fecha_hora = normalizar(fecha_hora or ahora())
-        remito = self.repo_remitos.obtener_o_error(remito_id)
-        if remito.estado != "EN_TRANSITO":
-            raise ValidacionError(f"El remito {remito.numero} no está en tránsito ({remito.estado}).")
+        remito = self._remito(remito_id)
+        if not remito.estado_actual.en_ruta:
+            raise ValidacionError(f"El remito {remito.numero} no está en tránsito ({remito.etiqueta_estado}).")
         envio = self._envio_de(remito.id)
+        fecha_no_futura(fecha_hora, "recepción")
         fecha_no_anterior(fecha_hora, self._ultimo_evento(envio.id), "recepción", "el último evento del envío")
         laboratorio = r.RepoLaboratorio(self.bd).obtener(remito.laboratorio_id)
         repo_tipos = r.RepoTipoAnalisis(self.bd)
@@ -214,8 +230,13 @@ class LogisticaService:
                 resultado.append((muestra, motivo))
 
             rechazadas = sum(1 for _, motivo in resultado if motivo)
-            remito.cambiar_estado("RECHAZADO" if not precinto_intacto or rechazadas == len(resultado)
-                                  else "RECIBIDO")
+            if not precinto_intacto:
+                remito.rechazar(fecha_hora, f"Precinto sanitario roto al recibir ({recibido_por})")
+            elif rechazadas == len(resultado):
+                remito.rechazar(fecha_hora, f"Todas las muestras rechazadas en la recepción ({recibido_por})")
+            else:
+                remito.recibir(fecha_hora, f"Recibido por {recibido_por}: {len(resultado) - rechazadas} aceptada(s), "
+                                           f"{rechazadas} rechazada(s)")
             self.repo_remitos.actualizar(remito)
 
             contenedor = self.repo_contenedores.obtener(remito.contenedor_id)
@@ -275,6 +296,15 @@ class LogisticaService:
             JOIN precinto p ON p.remito_id = re.id
             LEFT JOIN envio e ON e.remito_id = re.id
             {condicion} ORDER BY re.fecha_emision DESC""", parametros)
+
+    def historial_de_remito(self, remito_id):
+        filas = self.bd.consultar(
+            "SELECT * FROM historial_estado_remito WHERE remito_id = ? ORDER BY id", (remito_id,))
+        for h in filas:
+            h["estado_anterior"] = ETIQUETAS_ESTADO_REMITO.get(h["estado_anterior"], "—")
+            h["estado_nuevo_clave"] = h["estado_nuevo"]
+            h["estado_nuevo"] = ETIQUETAS_ESTADO_REMITO[h["estado_nuevo"]]
+        return filas
 
     def eventos_de_remito(self, remito_id):
         return self.bd.consultar("""

@@ -1,5 +1,5 @@
 """Registro de resultados y consulta de trazabilidad de muestras."""
-from veterinaria.dominio.entidades import Resultado
+from veterinaria.dominio.entidades import Resultado, fecha_no_futura
 from veterinaria.dominio.muestra import ETIQUETAS_ESTADO
 from veterinaria.excepciones import EntidadNoEncontradaError, ValidacionError
 from veterinaria.persistencia.conexion import BaseDatos
@@ -16,6 +16,7 @@ class LaboratorioService:
     def registrar_resultado(self, muestra_id, profesional, valores, conclusion, observaciones="",
                             fecha_hora=None) -> Resultado:
         fecha_hora = normalizar(fecha_hora or ahora())
+        fecha_no_futura(fecha_hora, "el resultado")
         muestra = self.repo_muestras.obtener_o_error(muestra_id)
         muestra.agregar_observador(RegistroTrazabilidad(self.bd))
         muestra.agregar_observador(AvisoAlCliente(self.bd))
@@ -35,6 +36,7 @@ class LaboratorioService:
             raise ValidacionError("Indique el profesional que rechaza la muestra.")
         if not motivo.strip():
             raise ValidacionError("Indique el motivo del rechazo.")
+        fecha_no_futura(fecha_hora, "el rechazo")
         muestra = self.repo_muestras.obtener_o_error(muestra_id)
         if muestra.estado != "RECIBIDA":
             raise ValidacionError(f"Sólo se pueden rechazar en el laboratorio muestras recibidas "

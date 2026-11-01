@@ -1,6 +1,7 @@
 """Registro de atenciones clínicas y emisión de órdenes de derivación a laboratorio."""
 from veterinaria.config import PRECIOS_CONSULTA
-from veterinaria.dominio.entidades import Consulta, OrdenDerivacion, VacunaAplicada, fecha_no_anterior
+from veterinaria.dominio.entidades import (Consulta, OrdenDerivacion, VacunaAplicada, fecha_no_anterior,
+                                           fecha_no_futura)
 from veterinaria.dominio.muestra import Muestra
 from veterinaria.excepciones import EntidadNoEncontradaError, ValidacionError
 from veterinaria.persistencia.conexion import BaseDatos
@@ -31,6 +32,8 @@ class ConsultaService:
             raise ValidacionError(f"{mascota.nombre} está dada de baja.")
         if not veterinario.activo:
             raise ValidacionError("El veterinario está inactivo.")
+        fecha_no_futura(fecha_hora, "la atención")
+        fecha_no_anterior(fecha_hora, mascota.fecha_nacimiento, "la atención", "el nacimiento de la mascota")
 
         with self.bd.transaccion():
             if turno_id:
@@ -81,6 +84,7 @@ class ConsultaService:
             raise ValidacionError("La atención ya tiene comprobante: registre una nueva atención para derivar "
                                   "análisis, porque estos no podrían facturarse.")
         fecha_hora = normalizar(fecha_hora or ahora())
+        fecha_no_futura(fecha_hora, "la orden")
         fecha_no_anterior(fecha_hora, consulta.fecha_hora, "la orden", "la consulta")
         laboratorio = CatalogoService(self.bd).laboratorio_central()
         repo_tipos = r.RepoTipoAnalisis(self.bd)

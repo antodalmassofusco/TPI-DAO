@@ -46,6 +46,23 @@ class TestWeb(unittest.TestCase):
             self.assertIn("<table", self.ok(f"/reportes?reporte={clase}"))
             self.assertEqual(self.web.get(f"/reportes/csv?reporte={clase}").status_code, 200)
 
+    def test_ids_inexistentes_no_rompen(self):
+        for url in ["/clientes?editar=99999", "/mascotas?editar=99999", "/mascotas/99999/historia",
+                    "/atencion?mascota=99999", "/atencion/99999/orden", "/comprobantes/99999"]:
+            respuesta = self.web.get(url, follow_redirects=True)
+            self.assertEqual(respuesta.status_code, 200, url)
+            self.assertIn("No existe", respuesta.get_data(as_text=True), url)
+        self.ok("/laboratorio/resultados?filtro=inexistente")
+        respuesta = self.web.get("/reportes/csv?reporte=ReporteFacturacion&desde=2026-12-01&hasta=2026-01-01",
+                                 follow_redirects=True)
+        self.assertIn("no puede ser posterior", respuesta.get_data(as_text=True))
+
+    def test_remito_muestra_su_bitacora(self):
+        remito = self.bd.escalar("SELECT id FROM remito WHERE estado = 'ANULADO'")
+        html = self.ok(f"/logistica/remitos/{remito}")
+        self.assertIn("Estados del remito", html)
+        self.assertIn("Anulado", html)
+
     def test_validaciones_se_muestran(self):
         html = self.post("/mascotas", {"nombre": "Sin dueño", "especie": "Perro", "fecha_nacimiento": "2020-01-01"})
         self.assertIn("responsable", html)

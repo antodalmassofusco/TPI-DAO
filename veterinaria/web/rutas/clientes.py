@@ -89,8 +89,9 @@ def modificar_mascota(mascota_id):
 
 @bp.post("/mascotas/<int:mascota_id>/baja")
 def baja_mascota(mascota_id):
-    MascotaService().baja(mascota_id)
-    flash("Mascota dada de baja.", "success")
+    cancelados = MascotaService().baja(mascota_id)
+    flash("Mascota dada de baja." + (f" Se cancelaron {cancelados} turno(s) pendiente(s)." if cancelados else ""),
+          "success")
     return redirect(url_for(".mascotas"))
 
 

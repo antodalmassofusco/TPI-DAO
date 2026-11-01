@@ -1,6 +1,6 @@
 """Emisión de comprobantes de atención (consulta + vacunas + análisis de laboratorio)."""
-from veterinaria.dominio.entidades import Comprobante, ItemComprobante
-from veterinaria.excepciones import ValidacionError
+from veterinaria.dominio.entidades import Comprobante, ItemComprobante, fecha_no_anterior, fecha_no_futura
+from veterinaria.excepciones import EntidadNoEncontradaError, ValidacionError
 from veterinaria.persistencia.conexion import BaseDatos
 from veterinaria.persistencia import repositorios as r
 from veterinaria.utils.fechas import ahora, normalizar
@@ -17,6 +17,8 @@ class ComprobanteService:
         consulta = r.RepoConsulta(self.bd).obtener_o_error(consulta_id)
         if self.repo.buscar_uno("consulta_id = ?", (consulta.id,)):
             raise ValidacionError("La atención ya tiene un comprobante emitido.")
+        fecha_no_futura(fecha_hora, "emisión del comprobante")
+        fecha_no_anterior(fecha_hora, consulta.fecha_hora, "emisión del comprobante", "la atención")
         pendientes = self.bd.consultar("""
             SELECT mu.codigo FROM muestra mu JOIN orden_derivacion o ON o.id = mu.orden_id
             WHERE o.consulta_id = ? AND mu.estado NOT IN ('ANALIZADA', 'RECHAZADA')""", (consulta.id,))
@@ -84,7 +86,7 @@ class ComprobanteService:
             JOIN veterinario v ON v.id = co.veterinario_id
             WHERE cp.id = ?""", (comprobante_id,))
         if cp is None:
-            raise ValidacionError("Comprobante inexistente.")
+            raise EntidadNoEncontradaError(f"No existe el comprobante con id {comprobante_id}.")
         cp["items"] = self.bd.consultar(
             "SELECT * FROM item_comprobante WHERE comprobante_id = ? ORDER BY id", (comprobante_id,))
         return cp

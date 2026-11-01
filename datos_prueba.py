@@ -191,6 +191,30 @@ def cargar_datos_prueba(ruta=RUTA_BD, semilla=42):
             instante, muestra_id = pendiente
             _registrar_resultado(lab, rnd, bd, muestra_id, instante)
 
+    # ------------------------------------------------------------------ Remitos para la demo
+    # Uno queda Emitido (para mostrar el despacho) y otro Anulado; la Clínica Centro conserva
+    # sus muestras sin empaquetar para mostrar el empaquetado.
+    ayer = (hoy - timedelta(days=1)).replace(hour=17, minute=30)
+
+    def _remito_demo(candidatas, cantidad=None):
+        for clinica in candidatas:
+            frio = [m["id"] for m in logistica.muestras_para_empaquetar(clinica.id) if m["temp_max"] <= 8]
+            conservadoras = [c for c in CatalogoService(bd).contenedores(clinica.id, solo_disponibles=True)
+                             if c.temp_max <= 8]
+            if frio and conservadoras:
+                lote = frio[:min(cantidad or conservadoras[0].capacidad, conservadoras[0].capacidad)]
+                try:
+                    return logistica.empaquetar(conservadoras[0].id, lote, "Enf. Ruiz", _fh(ayer))[0]
+                except VeterinariaError:
+                    continue
+        return None
+
+    _remito_demo([clinicas[2], clinicas[1]])                       # queda Emitido, listo para despachar
+    anulable = _remito_demo([clinicas[1], clinicas[0]], cantidad=1)
+    if anulable:
+        logistica.anular(anulable.id, "Enf. Ruiz", "El transportista no se presentó y venció el horario de retiro",
+                         _fh(ayer + timedelta(minutes=50)))
+
     # ------------------------------------------------------------------ Comprobantes
     comprobantes = ComprobanteService(bd)
     for consulta in consultas_hechas:

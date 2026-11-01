@@ -207,6 +207,36 @@ BEGIN
     SELECT RAISE(ABORT, 'La muestra está en un estado final y no puede modificarse');
 END;
 
+-- Trazabilidad: bitácora de estados de cada remito biológico (solo inserción)
+CREATE TABLE IF NOT EXISTS historial_estado_remito (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    remito_id       INTEGER NOT NULL REFERENCES remito(id),
+    estado_anterior TEXT,
+    estado_nuevo    TEXT NOT NULL,
+    fecha_hora      TEXT NOT NULL,
+    detalle         TEXT
+);
+
+CREATE TRIGGER IF NOT EXISTS trg_historial_remito_inmutable_upd
+BEFORE UPDATE ON historial_estado_remito
+BEGIN
+    SELECT RAISE(ABORT, 'La trazabilidad de estados del remito es inmutable');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_historial_remito_inmutable_del
+BEFORE DELETE ON historial_estado_remito
+BEGIN
+    SELECT RAISE(ABORT, 'La trazabilidad de estados del remito es inmutable');
+END;
+
+-- Un remito cerrado (Recibido, Rechazado o Anulado) no puede volver a cambiar
+CREATE TRIGGER IF NOT EXISTS trg_remito_estado_final
+BEFORE UPDATE OF estado ON remito
+WHEN OLD.estado IN ('RECIBIDO', 'RECHAZADO', 'ANULADO') AND NEW.estado <> OLD.estado
+BEGIN
+    SELECT RAISE(ABORT, 'El remito está cerrado y no puede modificarse');
+END;
+
 CREATE TABLE IF NOT EXISTS envio (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     remito_id     INTEGER NOT NULL UNIQUE REFERENCES remito(id),
@@ -289,3 +319,4 @@ CREATE INDEX IF NOT EXISTS idx_consulta_mascota ON consulta(mascota_id, fecha_ho
 CREATE INDEX IF NOT EXISTS idx_muestra_estado ON muestra(estado);
 CREATE INDEX IF NOT EXISTS idx_historial_muestra ON historial_estado_muestra(muestra_id, id);
 CREATE INDEX IF NOT EXISTS idx_evento_envio ON evento_envio(envio_id, fecha_hora);
+CREATE INDEX IF NOT EXISTS idx_historial_remito ON historial_estado_remito(remito_id, id);

@@ -1,7 +1,7 @@
 """Reportes: tabla, resumen, gráfico (Chart.js) y descarga en CSV."""
 from datetime import timedelta
 
-from flask import Blueprint, Response, flash, render_template, request
+from flask import Blueprint, Response, flash, redirect, render_template, request, url_for
 
 from veterinaria.excepciones import VeterinariaError
 from veterinaria.reportes.reportes import REPORTES
@@ -38,7 +38,11 @@ def reportes():
 
 @bp.get("/reportes/csv")
 def descargar_csv():
-    clase, _, _, resultado = _generar()
+    try:
+        clase, _, _, resultado = _generar()
+    except VeterinariaError as e:
+        flash(str(e), "warning")
+        return redirect(url_for(".reportes"))
     # el BOM inicial hace que Excel reconozca el archivo como UTF-8 (acentos)
     return Response("﻿" + resultado.a_csv(), mimetype="text/csv",
                     headers={"Content-Disposition": f"attachment; filename={clase.__name__}.csv"})

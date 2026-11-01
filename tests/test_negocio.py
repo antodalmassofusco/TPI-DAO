@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 
 from veterinaria.dominio.entidades import Clinica, Laboratorio, TipoAnalisis, TipoVacuna, Veterinario
 from veterinaria.dominio.muestra import Muestra
+from veterinaria.dominio.remito import Remito
 from veterinaria.excepciones import TransicionInvalidaError, ValidacionError
 from veterinaria.persistencia import repositorios as r
 from veterinaria.persistencia.conexion import BaseDatos
@@ -204,6 +205,103 @@ class TestReportes(BaseTest):
         self.assertEqual(reporte.filas[0]["h_transito"], 4.0)
         self.assertEqual(reporte.filas[0]["analizadas"], 0)
         self.assertIsNone(reporte.filas[0]["h_proceso"])
+
+
+class TestCicloDeVidaRemito(BaseTest):
+    """El remito biológico también usa el patrón State y tiene bitácora inmutable."""
+
+    def _estados_remito(self, remito_id):
+        return [h["estado_nuevo_clave"] for h in self.logistica.historial_de_remito(remito_id)]
+
+    def test_bitacora_del_remito_recibido(self):
+        _, _, remito = self._muestra_en_transito()
+        self.logistica.recibir(remito.id, "Bioq. Sosa", True, 5, fecha_hora=fh(0, 5))
+        self.assertEqual(self._estados_remito(remito.id), ["EMITIDO", "EN_TRANSITO", "RECIBIDO"])
+
+    def test_precinto_roto_cierra_el_remito_como_rechazado(self):
+        _, _, remito = self._muestra_en_transito()
+        self.logistica.recibir(remito.id, "Bioq. Sosa", False, 5, fecha_hora=fh(0, 5))
+        self.assertEqual(self._estados_remito(remito.id), ["EMITIDO", "EN_TRANSITO", "RECHAZADO"])
+
+    def test_anulacion_queda_en_la_bitacora(self):
+        consulta, _ = self.consultas.registrar(self.mascota.id, self.vet.id, "CONSULTA", "x", fecha_hora=fh(0))
+        _, muestras = self.consultas.emitir_orden(consulta.id, [self.hemograma.id], fecha_hora=fh(0))
+        remito, _ = self.logistica.empaquetar(self.conservadora.id, [muestras[0].id], "Enf.", fecha_hora=fh(0, 1))
+        self.logistica.anular(remito.id, "Enf. Ruiz", "Se canceló el retiro", fh(0, 2))
+        self.assertEqual(self._estados_remito(remito.id), ["EMITIDO", "ANULADO"])
+
+    def test_no_se_despacha_un_remito_cerrado(self):
+        _, _, remito = self._muestra_en_transito()
+        self.logistica.recibir(remito.id, "Bioq. Sosa", True, 5, fecha_hora=fh(0, 5))
+        with self.assertRaises(TransicionInvalidaError):
+            self.logistica.despachar(remito.id, "Otro", 5, fecha_hora=fh(0, 6))
+
+    def test_transicion_invalida_en_dominio(self):
+        remito = Remito("RB-X", 1, 1, 1, fh(0), "Enf.")
+        with self.assertRaises(TransicionInvalidaError):
+            remito.recibir(fh(1))
+        remito.despachar(fh(1))
+        with self.assertRaises(TransicionInvalidaError):
+            remito.anular(fh(2), "tarde")
+
+    def test_bitacora_del_remito_inmutable(self):
+        self._muestra_en_transito()
+        with self.assertRaises(ValidacionError):
+            self.bd.ejecutar("UPDATE historial_estado_remito SET estado_nuevo = 'RECIBIDO'")
+        with self.assertRaises(ValidacionError):
+            self.bd.ejecutar("DELETE FROM historial_estado_remito")
+
+    def test_remito_cerrado_no_cambia_en_la_base(self):
+        _, _, remito = self._muestra_en_transito()
+        self.logistica.recibir(remito.id, "Bioq. Sosa", True, 5, fecha_hora=fh(0, 5))
+        with self.assertRaises(ValidacionError):
+            self.bd.ejecutar("UPDATE remito SET estado = 'EN_TRANSITO' WHERE id = ?", (remito.id,))
+
+
+class TestFechas(BaseTest):
+    """Los hechos se registran cuando ocurren: no hay fechas futuras ni fuera de orden."""
+
+    def test_atencion_futura(self):
+        with self.assertRaises(ValidacionError):
+            self.consultas.registrar(self.mascota.id, self.vet.id, "CONSULTA", "x", fecha_hora=fh(400))
+
+    def test_atencion_anterior_al_nacimiento(self):
+        with self.assertRaises(ValidacionError):
+            self.consultas.registrar(self.mascota.id, self.vet.id, "CONSULTA", "x", fecha_hora="2020-01-01 10:00")
+
+    def test_orden_futura(self):
+        consulta, _ = self.consultas.registrar(self.mascota.id, self.vet.id, "CONSULTA", "x", fecha_hora=fh(0))
+        with self.assertRaises(ValidacionError):
+            self.consultas.emitir_orden(consulta.id, [self.hemograma.id], fecha_hora=fh(400))
+
+    def test_recepcion_futura(self):
+        _, _, remito = self._muestra_en_transito()
+        with self.assertRaises(ValidacionError):
+            self.logistica.recibir(remito.id, "Bioq. Sosa", True, 5, fecha_hora=fh(400))
+
+    def test_resultado_futuro(self):
+        _, muestra, remito = self._muestra_en_transito()
+        self.logistica.recibir(remito.id, "Bioq. Sosa", True, 5, fecha_hora=fh(0, 5))
+        with self.assertRaises(ValidacionError):
+            self.lab.registrar_resultado(muestra.id, "Bioq. Sosa", "x", "x", fecha_hora=fh(400))
+
+    def test_comprobante_anterior_a_la_atencion(self):
+        consulta, _ = self.consultas.registrar(self.mascota.id, self.vet.id, "CONSULTA", "x", fecha_hora=fh(0))
+        with self.assertRaises(ValidacionError):
+            ComprobanteService(self.bd).emitir(consulta.id, fh(-1))
+
+
+class TestArreglosVarios(BaseTest):
+    def test_empaquetar_muestras_repetidas(self):
+        consulta, _ = self.consultas.registrar(self.mascota.id, self.vet.id, "CONSULTA", "x", fecha_hora=fh(0))
+        _, muestras = self.consultas.emitir_orden(consulta.id, [self.hemograma.id], fecha_hora=fh(0))
+        with self.assertRaises(ValidacionError):
+            self.logistica.empaquetar(self.conservadora.id, [muestras[0].id, muestras[0].id], "Enf.", fh(0, 1))
+
+    def test_baja_de_mascota_cancela_sus_turnos(self):
+        turno = TurnoService(self.bd).reservar(self.vet.id, self.mascota.id, "2030-03-01 10:00", 30)
+        self.assertEqual(MascotaService(self.bd).baja(self.mascota.id), 1)
+        self.assertEqual(r.RepoTurno(self.bd).obtener(turno.id).estado, "CANCELADO")
 
 
 if __name__ == "__main__":

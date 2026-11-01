@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from typing import Optional
 
 from veterinaria.config import ESPECIES, PRIORIDADES, SEXOS, TIPOS_CONSULTA
 from veterinaria.excepciones import TransicionInvalidaError, ValidacionError
-from veterinaria.utils.fechas import hoy, meses_entre, normalizar, parse_fecha, parse_fecha_hora
+from veterinaria.utils.fechas import ahora, hoy, meses_entre, normalizar, parse_fecha, parse_fecha_hora
+
+# El remito tiene su propio módulo (patrón State); se reexporta para mantener los imports existentes
+from veterinaria.dominio.remito import Remito  # noqa: F401
 
 
 def _requerido(valor, nombre):
@@ -258,37 +261,6 @@ class Contenedor:
 
 
 @dataclass
-class Remito:
-    """Remito biológico: documento que acompaña a la conservadora en todo su recorrido."""
-    numero: str
-    clinica_id: int
-    laboratorio_id: int
-    contenedor_id: int
-    fecha_emision: str
-    responsable: str
-    estado: str = "EMITIDO"
-    id: Optional[int] = None
-
-    TRANSICIONES = {
-        "EMITIDO": {"EN_TRANSITO", "ANULADO"},
-        "EN_TRANSITO": {"RECIBIDO", "RECHAZADO"},
-        "RECIBIDO": set(),
-        "RECHAZADO": set(),
-        "ANULADO": set(),
-    }
-
-    def __post_init__(self):
-        _requerido(self.responsable, "responsable del empaquetado")
-        self.fecha_emision = normalizar(self.fecha_emision)
-
-    def cambiar_estado(self, nuevo: str):
-        if nuevo not in self.TRANSICIONES[self.estado]:
-            raise TransicionInvalidaError(
-                f"El remito {self.numero} está {self.estado} y no puede pasar a {nuevo}.")
-        self.estado = nuevo
-
-
-@dataclass
 class Precinto:
     """Precinto sanitario colocado al cerrar la conservadora."""
     codigo: str
@@ -310,6 +282,16 @@ class Precinto:
 @dataclass
 class HistorialEstado:
     muestra_id: int
+    estado_nuevo: str
+    fecha_hora: str
+    estado_anterior: Optional[str] = None
+    detalle: str = ""
+    id: Optional[int] = None
+
+
+@dataclass
+class HistorialEstadoRemito:
+    remito_id: int
     estado_nuevo: str
     fecha_hora: str
     estado_anterior: Optional[str] = None
@@ -418,3 +400,15 @@ def fecha_no_anterior(fecha_hora: str, referencia: str, que: str, respecto: str)
     """Valida el orden cronológico de los eventos de la trazabilidad."""
     if parse_fecha_hora(fecha_hora) < parse_fecha_hora(referencia):
         raise ValidacionError(f"La fecha de {que} ({fecha_hora}) no puede ser anterior a {respecto} ({referencia}).")
+
+
+# Margen para diferencias de reloj entre la carga del formulario y el registro
+TOLERANCIA_FUTURO_MIN = 10
+
+
+def fecha_no_futura(fecha_hora: str, que: str):
+    """Los hechos de la trazabilidad (atención, extracción, envío, recepción, resultado, facturación)
+    se registran cuando ocurren: no pueden fecharse en el futuro."""
+    limite = parse_fecha_hora(ahora()) + timedelta(minutes=TOLERANCIA_FUTURO_MIN)
+    if parse_fecha_hora(fecha_hora) > limite:
+        raise ValidacionError(f"La fecha de {que} ({fecha_hora}) no puede ser futura.")

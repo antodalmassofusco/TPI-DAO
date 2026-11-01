@@ -92,6 +92,8 @@ RepoRemito = _repo("RepoRemito", "remito", e.Remito, "el remito")
 RepoPrecinto = _repo("RepoPrecinto", "precinto", e.Precinto, "el precinto")
 RepoMuestra = _repo("RepoMuestra", "muestra", Muestra, "la muestra")
 RepoHistorial = _repo("RepoHistorial", "historial_estado_muestra", e.HistorialEstado, "el historial")
+RepoHistorialRemito = _repo("RepoHistorialRemito", "historial_estado_remito", e.HistorialEstadoRemito,
+                            "el historial del remito")
 RepoEnvio = _repo("RepoEnvio", "envio", e.Envio, "el envío")
 RepoEventoEnvio = _repo("RepoEventoEnvio", "evento_envio", e.EventoEnvio, "el evento de envío")
 RepoRecepcion = _repo("RepoRecepcion", "recepcion", e.Recepcion, "la recepción")

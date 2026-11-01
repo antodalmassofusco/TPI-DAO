@@ -18,6 +18,8 @@ FILTROS = {
 @bp.get("/resultados")
 def resultados():
     filtro = request.args.get("filtro", "pendientes")
+    if filtro not in FILTROS:
+        filtro = "pendientes"
     servicio = LaboratorioService()
     conteo = {clave: len(servicio.muestras(estados)) for clave, (_, estados) in FILTROS.items()}
     return render_template("resultados.html", muestras=servicio.muestras(FILTROS[filtro][1]), filtro=filtro,
