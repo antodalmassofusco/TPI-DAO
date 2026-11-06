@@ -28,6 +28,7 @@ from veterinaria.servicios.vacunas import VacunaService
 from veterinaria.utils.fechas import formatear
 
 DIAS_HISTORIA = 75
+MINIMO_PARA_EMPAQUETAR = 3   # muestras sin empaquetar que deja la Clínica Centro para la demo
 
 CLINICAS = [("Clínica Centro", "Av. Colón 1250, Córdoba", "351-4221100"),
             ("Clínica Norte", "Av. Rafael Núñez 4500, Córdoba", "351-4813300"),
@@ -195,6 +196,27 @@ def cargar_datos_prueba(ruta=RUTA_BD, semilla=42):
     # Uno queda Emitido (para mostrar el despacho) y otro Anulado; la Clínica Centro conserva
     # sus muestras sin empaquetar para mostrar el empaquetado.
     ayer = (hoy - timedelta(days=1)).replace(hour=17, minute=30)
+
+    # La actividad simulada depende de la fecha: se completan muestras extraídas ayer para que
+    # siempre haya material para la demo (Sur: remito Emitido, Norte: Anulado, Centro: empaquetado).
+    minimo_por_clinica = {clinicas[2].id: 2, clinicas[1].id: 1, clinicas[0].id: MINIMO_PARA_EMPAQUETAR}
+    analisis_demo = [analisis["Hemograma completo"], analisis["Bioquímica sérica"], analisis["Coproparasitológico"]]
+    extra = 0
+    for clinica in clinicas:
+        faltan = minimo_por_clinica[clinica.id] - sum(
+            1 for m in logistica.muestras_para_empaquetar(clinica.id) if m["temp_max"] <= 8)
+        vet = next(v for v in vets if v.clinica_id == clinica.id)
+        for _ in range(max(faltan, 0)):
+            instante = (hoy - timedelta(days=1)).replace(hour=16, minute=0) + timedelta(minutes=8 * extra)
+            mascota = mascotas[(7 * extra + 3) % (len(mascotas) - 1)]
+            try:
+                consulta, _ = consultas_srv.registrar(mascota.id, vet.id, "CONSULTA", "Control y análisis de rutina",
+                                                      fecha_hora=_fh(instante))
+                consultas_srv.emitir_orden(consulta.id, [analisis_demo[extra % len(analisis_demo)].id],
+                                           fecha_hora=_fh(instante + timedelta(minutes=5)))
+            except VeterinariaError:
+                pass
+            extra += 1
 
     def _remito_demo(candidatas, cantidad=None):
         for clinica in candidatas:
