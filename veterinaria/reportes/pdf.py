@@ -1,25 +1,29 @@
-"""Exportación de un reporte a PDF (título, resumen, gráfico y tabla).
+"""Exportación de un reporte a PDF como informe de gestión: conclusiones, resumen, gráfico y tabla.
 
-Recibe el mismo ResultadoReporte que muestran la pantalla y el CSV, así que sirve para los
-6 reportes sin tocar ninguno.
+Recibe el mismo ResultadoReporte que muestran la pantalla y el CSV, así que sirve para todos los
+reportes sin tocar ninguno: dibuja cada gráfico según su tipo (barras, columnas, líneas o torta).
 """
 import io
 from xml.sax.saxutils import escape
 
 from reportlab.graphics.charts.barcharts import HorizontalBarChart, VerticalBarChart
 from reportlab.graphics.charts.legends import Legend
+from reportlab.graphics.charts.linecharts import HorizontalLineChart
+from reportlab.graphics.charts.piecharts import Pie
+from reportlab.graphics.widgets.markers import makeMarker
 from reportlab.graphics.shapes import Drawing, String
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import cm
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.pdfbase.pdfmetrics import stringWidth
+from reportlab.platypus import KeepTogether, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
+from veterinaria.reportes.base import formato_valor
 from veterinaria.utils.formato import moneda, numero
 
 COLOR = colors.HexColor("#1f4e79")
-# Misma paleta categórica que el gráfico de la pantalla
-PALETA = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"]
+COLOR_ACENTO = colors.HexColor("#2a78d6")
 MAX_BARRAS = 15
 
 
@@ -34,18 +38,88 @@ def _texto(valor, titulo_columna) -> str:
     return numero(valor, 0 if float(valor).is_integer() else 1)
 
 
-def _formato(valor, unidad):
-    if unidad == "$":
-        return f"$ {numero(valor, 0)}"
-    texto = numero(valor, 0 if float(valor).is_integer() else 1)
-    return f"{texto} h" if unidad == "h" else texto
+def _formato_eje(valor, unidad):
+    """Marcas del eje; los pesos se abrevian en millones para que no se amontonen."""
+    if unidad == "$" and abs(valor) >= 1_000_000:
+        return f"$ {numero(valor / 1_000_000, 0 if float(valor / 1_000_000).is_integer() else 1)} M"
+    return formato_valor(valor, unidad)
 
 
-def _grafico(resultado, ancho):
-    """Mismo gráfico que la pantalla: barras horizontales (apiladas si hay varias series) o columnas."""
-    g = resultado.grafico_preparado(MAX_BARRAS)
-    if not g:
-        return None
+TEXTO_GRAFICO = colors.HexColor("#52514e")
+GRILLA = colors.HexColor("#e3e8ef")
+
+
+def _leyenda(dibujo, x, y, pares, columnas=True):
+    ley = Legend()
+    ley.x, ley.y = x, y
+    ley.alignment = "right"
+    if columnas:
+        ley.columnMaximum, ley.deltax = 1, 110
+    else:
+        ley.columnMaximum, ley.deltay = len(pares), 14
+    ley.fontName, ley.fontSize = "Helvetica", 7.5
+    ley.boxAnchor = "nw"
+    ley.dx = ley.dy = 7
+    ley.colorNamePairs = pares
+    dibujo.add(ley)
+
+
+def _torta(g, ancho):
+    """Torta con la leyenda al costado: nombre de cada porción, valor y porcentaje."""
+    alto, diametro = 150, 120
+    dibujo = Drawing(ancho, alto)
+    torta = Pie()
+    torta.x, torta.y, torta.width, torta.height = 10, 15, diametro, diametro
+    torta.data = [float(v) for v in g["totales"]]
+    torta.labels = None
+    torta.startAngle, torta.direction = 90, "clockwise"
+    for i, color in enumerate(g["colores"]):
+        torta.slices[i].fillColor = colors.HexColor(color)
+        torta.slices[i].strokeColor = colors.white
+        torta.slices[i].strokeWidth = 1.2
+    dibujo.add(torta)
+    _leyenda(dibujo, diametro + 35, 15 + diametro / 2 + 7 * len(g["etiquetas"]),
+             [(colors.HexColor(c), f"{e}: {p}") for c, e, p in zip(g["colores"], g["etiquetas"], g["puntas"])],
+             columnas=False)
+    return dibujo
+
+
+def _lineas(g, ancho):
+    """Una curva por serie, en orden cronológico, con un punto en cada período."""
+    alto = 210
+    dibujo = Drawing(ancho, alto)
+    grafico = HorizontalLineChart()
+    grafico.x, grafico.y = 60, 25
+    grafico.width, grafico.height = ancho - 80, alto - 60
+    grafico.data = [[float(v) for v in s["valores"]] for s in g["series"]]
+    grafico.categoryAxis.categoryNames = g["etiquetas"]
+    grafico.categoryAxis.labels.boxAnchor = "n"
+    grafico.categoryAxis.strokeColor = colors.HexColor("#c8d0da")
+    for eje in (grafico.categoryAxis.labels, grafico.valueAxis.labels):
+        eje.fontName, eje.fontSize = "Helvetica", 7
+    grafico.valueAxis.valueMin = 0
+    grafico.valueAxis.labelTextFormat = lambda v: _formato_eje(v, g["unidad"])
+    grafico.valueAxis.strokeColor = None
+    grafico.valueAxis.visibleGrid = True
+    grafico.valueAxis.gridStrokeColor = GRILLA
+    grafico.valueAxis.gridStrokeWidth = 0.5
+    for i, serie in enumerate(g["series"]):
+        grafico.lines[i].strokeColor = colors.HexColor(serie["color"])
+        grafico.lines[i].strokeWidth = 1.6
+        grafico.lines[i].symbol = makeMarker("FilledCircle", size=3.5, fillColor=colors.HexColor(serie["color"]),
+                                             strokeColor=colors.white, strokeWidth=0.8)
+    dibujo.add(grafico)
+    if g["leyenda"]:
+        _leyenda(dibujo, grafico.x, alto - 6, [(colors.HexColor(s["color"]), s["titulo"]) for s in g["series"]])
+    return dibujo
+
+
+def _grafico(g, ancho):
+    """Mismo gráfico que la pantalla, según su tipo."""
+    if g["tipo"] == "torta":
+        return _torta(g, ancho)
+    if g["tipo"] == "lineas":
+        return _lineas(g, ancho)
     horizontal = g["tipo"] == "barras"
     etiquetas, series = list(g["etiquetas"]), [list(s["valores"]) for s in g["series"]]
     if horizontal:
@@ -53,13 +127,16 @@ def _grafico(resultado, ancho):
         etiquetas.reverse()
         for valores in series:
             valores.reverse()
-    leyenda = 22 if len(series) > 1 else 0
+    leyenda = 22 if g["leyenda"] else 0
+    puntas_texto = g["puntas"]
     alto = (30 + 18 * len(etiquetas) if horizontal else 200) + leyenda
     dibujo = Drawing(ancho, alto)
     if horizontal:
         barras = HorizontalBarChart()
         barras.x, barras.y = 170, 15
-        barras.width, barras.height = ancho - 250, alto - 25 - leyenda
+        # el ancho deja lugar al texto más largo de las puntas
+        margen = max([stringWidth(t, "Helvetica-Bold", 6.5) for t in puntas_texto if t] + [20]) + 12
+        barras.width, barras.height = ancho - 170 - margen, alto - 25 - leyenda
         barras.categoryAxis.labels.boxAnchor = "e"
         barras.categoryAxis.categoryNames = [e[:32] for e in etiquetas]
     else:
@@ -74,45 +151,37 @@ def _grafico(resultado, ancho):
     for eje in (barras.categoryAxis.labels, barras.valueAxis.labels):
         eje.fontName, eje.fontSize = "Helvetica", 7
     barras.valueAxis.valueMin = 0
-    barras.valueAxis.labelTextFormat = lambda v: _formato(v, g["unidad"])
+    barras.valueAxis.labelTextFormat = lambda v: _formato_eje(v, g["unidad"])
     barras.valueAxis.strokeColor = None
     barras.valueAxis.visibleGrid = True
     barras.valueAxis.gridStrokeColor = colors.HexColor("#e3e8ef")
     barras.valueAxis.gridStrokeWidth = 0.5
     barras.categoryAxis.strokeColor = colors.HexColor("#c8d0da")
     for i, serie in enumerate(g["series"]):
-        barras.bars[i].fillColor = colors.HexColor(PALETA[serie["color"]])
+        barras.bars[i].fillColor = colors.HexColor(serie["color"])
         barras.bars[i].strokeColor = colors.white
         barras.bars[i].strokeWidth = 0.75 if len(series) > 1 else 0
     dibujo.add(barras)
 
-    # Total escrito en la punta de cada barra o columna
-    totales = list(g["totales"])
+    # Texto en la punta de cada barra o columna (total, % o lo que defina el reporte)
+    totales, puntas = list(g["totales"]), list(g["puntas"])
     if horizontal:
         totales.reverse()
+        puntas.reverse()
     # Se configura la escala igual que reportlab al dibujar (con las series acumuladas si están apiladas)
     # para poder ubicar los totales en la punta de cada barra
     barras.valueAxis.setPosition(barras.x, barras.y, barras.width if horizontal else barras.height)
     barras._getConfigureData()
     barras.valueAxis.configure(barras._configureData)
-    for i, total in enumerate(totales):
-        if not total:
+    for i, (total, texto) in enumerate(zip(totales, puntas)):
+        if not texto:
             continue
         x, y = _punta(barras, i, total, horizontal)
-        dibujo.add(String(x, y, _formato(total, g["unidad"]), fontName="Helvetica-Bold", fontSize=6.5,
+        dibujo.add(String(x, y, texto, fontName="Helvetica-Bold", fontSize=6.5,
                           fillColor=colors.HexColor("#52514e"), textAnchor="start" if horizontal else "middle"))
 
-    if len(series) > 1:
-        ley = Legend()
-        ley.x, ley.y = barras.x, alto - 6
-        ley.alignment = "right"
-        ley.columnMaximum = 1
-        ley.deltax = 110
-        ley.fontName, ley.fontSize = "Helvetica", 7
-        ley.boxAnchor = "nw"
-        ley.dx = ley.dy = 7
-        ley.colorNamePairs = [(colors.HexColor(PALETA[s["color"]]), s["titulo"]) for s in g["series"]]
-        dibujo.add(ley)
+    if g["leyenda"]:
+        _leyenda(dibujo, barras.x, alto - 6, [(colors.HexColor(s["color"]), s["titulo"]) for s in g["series"]])
     return dibujo
 
 
@@ -125,6 +194,24 @@ def _punta(barras, i, total, horizontal):
         return eje.scale(total) + 4, barras.y + paso * (i + 0.5) - 2.5
     paso = barras.width / n
     return barras.x + paso * (i + 0.5), eje.scale(total) + 3
+
+
+def _conclusiones(resultado, ancho, normal):
+    """Recuadro con las conclusiones: lo primero que lee el dueño, con qué conviene hacer."""
+    titulo = ParagraphStyle("conclusion_titulo", parent=normal, fontName="Helvetica-Bold", fontSize=10.5,
+                            textColor=COLOR, spaceAfter=4)
+    vineta = ParagraphStyle("conclusion", parent=normal, fontSize=9.5, leading=13, leftIndent=10, bulletIndent=0,
+                            spaceAfter=3)
+    contenido = [Paragraph("Conclusiones para la toma de decisiones", titulo)]
+    contenido += [Paragraph(escape(linea), vineta, bulletText="•") for linea in resultado.conclusiones]
+    recuadro = Table([[contenido]], colWidths=[ancho])
+    recuadro.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#eef5fd")),
+        ("LINEBEFORE", (0, 0), (0, -1), 3, COLOR_ACENTO),
+        ("LEFTPADDING", (0, 0), (-1, -1), 12), ("RIGHTPADDING", (0, 0), (-1, -1), 12),
+        ("TOPPADDING", (0, 0), (-1, -1), 8), ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+    ]))
+    return recuadro
 
 
 def generar_pdf(resultado, subtitulo: str = "") -> bytes:
@@ -141,10 +228,15 @@ def generar_pdf(resultado, subtitulo: str = "") -> bytes:
                             leftMargin=1.5 * cm, rightMargin=1.5 * cm, topMargin=1.5 * cm, bottomMargin=1.5 * cm)
     ancho = pagina[0] - 3 * cm
 
-    elementos = [Paragraph(escape(resultado.titulo), titulo)]
+    antetitulo = ParagraphStyle("antetitulo", parent=normal, fontSize=8, textColor=colors.HexColor("#52514e"),
+                                fontName="Helvetica-Bold", spaceAfter=2)
+    elementos = [Paragraph("HUELLITAS · INFORME DE GESTIÓN", antetitulo),
+                 Paragraph(escape(resultado.titulo), titulo)]
     if subtitulo:
         elementos.append(Paragraph(escape(subtitulo), normal))
-    elementos.append(Spacer(1, 8))
+    elementos.append(Spacer(1, 10))
+    if resultado.conclusiones:
+        elementos += [_conclusiones(resultado, ancho, normal), Spacer(1, 4)]
 
     if resultado.resumen:
         elementos.append(Paragraph("Resumen", seccion))
@@ -153,9 +245,25 @@ def generar_pdf(resultado, subtitulo: str = "") -> bytes:
             estilo = ParagraphStyle("linea", parent=normal, leftIndent=sangria)
             elementos.append(Paragraph(escape(linea.strip()), estilo))
 
-    grafico = _grafico(resultado, ancho)
-    if grafico:
-        elementos += [Paragraph(escape(resultado.grafico.titulo), seccion), grafico]
+    nota_estilo = ParagraphStyle("nota", parent=normal, fontSize=8, textColor=TEXTO_GRAFICO)
+    graficos = resultado.graficos_preparados(MAX_BARRAS)
+    k = 0
+    while k < len(graficos):
+        g = graficos[k]
+        # dos tortas seguidas van una al lado de la otra
+        if g["tipo"] == "torta" and k + 1 < len(graficos) and graficos[k + 1]["tipo"] == "torta":
+            par = [g, graficos[k + 1]]
+            celdas = [[Paragraph(escape(x["titulo"]), seccion) for x in par], [_torta(x, ancho / 2) for x in par]]
+            tabla = Table(celdas, colWidths=[ancho / 2, ancho / 2])
+            tabla.setStyle(TableStyle([("LEFTPADDING", (0, 0), (-1, -1), 0), ("VALIGN", (0, 0), (-1, -1), "TOP")]))
+            elementos.append(tabla)
+            k += 2
+            continue
+        bloque = [Paragraph(escape(g["titulo"]), seccion), _grafico(g, ancho)]
+        if g["nota"]:
+            bloque.append(Paragraph(escape(g["nota"]), nota_estilo))
+        elementos.append(KeepTogether(bloque))   # el título nunca queda separado de su gráfico
+        k += 1
 
     elementos.append(Paragraph(f"Detalle ({len(resultado.filas)} filas)", seccion))
     titulos = [t for _, t in resultado.columnas]
@@ -177,7 +285,7 @@ def generar_pdf(resultado, subtitulo: str = "") -> bytes:
         lienzo.saveState()
         lienzo.setFont("Helvetica", 7)
         lienzo.setFillColor(colors.grey)
-        lienzo.drawString(1.5 * cm, 0.8 * cm, f"Huellitas · {resultado.titulo}")
+        lienzo.drawString(1.5 * cm, 0.8 * cm, f"Huellitas · Informe: {resultado.titulo}")
         lienzo.drawRightString(pagina[0] - 1.5 * cm, 0.8 * cm, f"Página {documento.page}")
         lienzo.restoreState()
 

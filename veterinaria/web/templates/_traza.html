@@ -5,7 +5,7 @@
   <div class="card-body">
     <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
       <span class="h5 mb-0">{{ m.codigo }}</span><span class="text-body-secondary">{{ m.analisis }}</span>
-      <span class="ms-auto">{{ estado(m.prioridad) }} {{ estado(m.estado) }}</span>
+      <span class="ms-auto">{{ estado(m.prioridad) }} {{ estado(m.estado, muestra=true) }}</span>
     </div>
     {% if m.motivo_rechazo %}
       <div class="alert alert-danger py-2 small d-flex gap-2"><i class="bi bi-x-octagon-fill"></i><div><strong>Motivo de rechazo:</strong> {{ m.motivo_rechazo }}</div></div>

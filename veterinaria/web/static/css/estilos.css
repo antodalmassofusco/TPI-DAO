@@ -93,3 +93,7 @@ tr[data-href] { cursor: pointer; }
 .categoria-reporte.activa { box-shadow: 0 2px 12px rgba(16, 38, 59, .10); }
 .categoria-reporte .list-group-item { border-color: #eef1f5; }
 .categoria-reporte .card-body { flex: 0 0 auto; }
+
+/* Conclusiones de los informes */
+.conclusiones { background: #eef5fd; border-left: 3px solid #2a78d6; border-radius: .5rem; padding: .75rem 1rem; }
+.conclusiones .bi { color: #2a78d6; }

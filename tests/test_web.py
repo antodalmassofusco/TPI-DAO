@@ -42,13 +42,15 @@ class TestWeb(unittest.TestCase):
                     "/comprobantes", f"/comprobantes/{comprobante}", "/avisos", "/avisos?pendientes=0"]:
             self.ok(url)
         for clase in ("ReporteAtencionesDerivaciones", "ReporteMuestrasRechazadas", "ReporteTratamientos",
-                      "ReporteVacunasPendientes", "ReporteFacturacion", "ReporteTiemposMuestras"):
+                      "ReporteVacunasPendientes", "ReporteFacturacion", "ReporteTiemposMuestras",
+                      "ReporteIngresosPorTipo", "ReportePacientes", "ReporteMuestrasIngresadas"):
             self.assertIn("<table", self.ok(f"/reportes?reporte={clase}"))
             self.assertEqual(self.web.get(f"/reportes/csv?reporte={clase}").status_code, 200)
             pdf = self.web.get(f"/reportes/pdf?reporte={clase}")
             self.assertEqual(pdf.status_code, 200, clase)
             self.assertEqual(pdf.mimetype, "application/pdf", clase)
             self.assertTrue(pdf.get_data().startswith(b"%PDF"), clase)
+            self.assertIn("Informe", pdf.headers["Content-Disposition"], clase)
 
     def test_ids_inexistentes_no_rompen(self):
         for url in ["/clientes?editar=99999", "/mascotas?editar=99999", "/mascotas/99999/historia",
@@ -60,6 +62,28 @@ class TestWeb(unittest.TestCase):
         respuesta = self.web.get("/reportes/csv?reporte=ReporteFacturacion&desde=2026-12-01&hasta=2026-01-01",
                                  follow_redirects=True)
         self.assertIn("no puede ser posterior", respuesta.get_data(as_text=True))
+
+    def test_informes_por_periodo(self):
+        from datetime import date
+        from veterinaria.web.rutas.reportes import rango_periodo
+        dia = date(2026, 11, 11)
+        self.assertEqual(rango_periodo("mes", dia), (date(2026, 11, 1), dia))
+        self.assertEqual(rango_periodo("trimestre", dia), (date(2026, 10, 1), dia))
+        self.assertEqual(rango_periodo("anio", dia), (date(2026, 1, 1), dia))
+        self.assertIsNone(rango_periodo("otro", dia))
+        for periodo in ("mes", "trimestre", "anio", "inexistente"):
+            self.ok(f"/reportes?reporte=ReporteIngresosPorTipo&periodo={periodo}")
+            pdf = self.web.get(f"/reportes/pdf?reporte=ReportePacientes&periodo={periodo}")
+            self.assertEqual(pdf.status_code, 200, periodo)
+
+    def test_mi_dia_del_veterinario(self):
+        atencion = self.bd.consultar_uno("SELECT veterinario_id, substr(fecha_hora, 1, 10) AS dia, motivo "
+                                         "FROM consulta ORDER BY id DESC LIMIT 1")
+        html = self.ok(f"/mi-dia?veterinario={atencion['veterinario_id']}&fecha={atencion['dia']}")
+        self.assertIn(atencion["motivo"], html)
+        self.ok("/mi-dia")
+        self.assertIn("La fecha no es válida", self.ok("/mi-dia?fecha=no-es-fecha"))
+        self.ok("/mi-dia?veterinario=99999")
 
     def test_trazabilidad_busca_por_cliente(self):
         fila = self.bd.consultar_uno("""

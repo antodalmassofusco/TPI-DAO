@@ -26,7 +26,7 @@
           <td>{{ m.mascota }} <span class="small text-body-secondary">({{ m.especie }})</span></td>
           <td>{{ m.analisis }}</td><td>{{ m.clinica }}</td>
           <td class="small text-nowrap">{{ m.fecha_extraccion|fh }}</td>
-          <td>{{ estado(m.estado) }}</td>
+          <td>{{ estado(m.estado, muestra=true) }}</td>
         </tr>
       {% else %}<tr><td colspan="7">{{ vacio("No hay muestras de clientes con ese nombre.", "search") }}</td></tr>{% endfor %}
       </tbody>

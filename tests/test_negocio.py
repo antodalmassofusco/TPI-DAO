@@ -104,7 +104,7 @@ class TestCicloDeVidaMuestra(BaseTest):
         self.lab.registrar_resultado(muestra.id, "Bioq. Sosa", "Hto 45%", "Normal", fecha_hora=fh(0, 8))
         traza = self.lab.trazabilidad(muestra.codigo)
         estados = [h["estado_nuevo"] for h in traza["historial"]]
-        self.assertEqual(estados, ["Extraída", "Empaquetada", "En tránsito", "Recibida", "Analizada"])
+        self.assertEqual(estados, ["Extraída", "Empaquetada", "Siendo analizada", "Recibida", "Analizada"])
         comprobante = ComprobanteService(self.bd).emitir(consulta.id, fh(1))
         self.assertEqual(comprobante.total, 18000 + 9000)
         # aviso automático al cliente (Observer)
@@ -195,6 +195,9 @@ class TestReportes(BaseTest):
         for clase in REPORTES:
             resultado = clase(self.bd).generar(desde=fh(-10)[:10], hasta=fh(10)[:10])
             self.assertIsInstance(resultado.filas, list, clase.__name__)
+            self.assertIsInstance(resultado.conclusiones, list, clase.__name__)
+            if resultado.filas:
+                self.assertTrue(resultado.conclusiones, clase.__name__)
             grafico = resultado.grafico_preparado()
             if grafico:
                 for serie in grafico["series"]:

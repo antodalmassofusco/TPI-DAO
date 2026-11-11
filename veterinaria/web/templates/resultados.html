@@ -21,7 +21,7 @@
           <td>{{ m.mascota }} <span class="small text-body-secondary">({{ m.especie }})</span></td>
           <td>{{ m.analisis }}<div class="small text-body-secondary">{{ m.tipo_muestra }}</div></td>
           <td>{{ m.remito or "—" }}</td>
-          <td>{{ estado(m.estado) }}{% if m.motivo_rechazo %}<div class="small text-danger">{{ m.motivo_rechazo }}</div>{% endif %}</td>
+          <td>{{ estado(m.estado, muestra=true) }}{% if m.motivo_rechazo %}<div class="small text-danger">{{ m.motivo_rechazo }}</div>{% endif %}</td>
           <td class="text-end text-nowrap">
             {% if m.estado == "RECIBIDA" %}<a class="btn btn-sm btn-primary" href="{{ url_for('laboratorio.muestra', muestra_id=m.id) }}"><i class="bi bi-pencil-square"></i> Cargar resultado</a>
             {% else %}<a class="btn btn-sm btn-light" href="{{ url_for('laboratorio.trazabilidad', codigo=m.codigo) }}" data-bs-toggle="tooltip" title="Trazabilidad"><i class="bi bi-signpost-split"></i></a>{% endif %}

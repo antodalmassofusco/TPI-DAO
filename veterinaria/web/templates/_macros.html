@@ -30,8 +30,8 @@
 </div>
 {% endmacro %}
 
-{% macro estado(clave) %}
-{% set texto, color = ESTADOS.get(clave, (clave, "secondary")) %}
+{% macro estado(clave, muestra=false) %}
+{% set texto, color = (ESTADOS_MUESTRA if muestra else ESTADOS).get(clave, (clave, "secondary")) %}
 <span class="badge rounded-pill text-bg-{{ color }} estado">{{ texto }}</span>
 {% endmacro %}
 

@@ -20,7 +20,7 @@
     {% set etapas = [
       ("EXTRAIDA", "Por empaquetar", url_for('logistica.empaquetado')),
       ("EMPAQUETADA", "Por despachar", url_for('logistica.remitos', estado='EMITIDO')),
-      ("EN_TRANSITO", "En tránsito", url_for('logistica.remitos', estado='EN_TRANSITO')),
+      ("EN_TRANSITO", "Siendo analizada", url_for('logistica.remitos', estado='EN_TRANSITO')),
       ("RECIBIDA", "Por analizar", url_for('laboratorio.resultados')),
       ("ANALIZADA", "Analizadas", url_for('laboratorio.resultados', filtro='analizadas')),
       ("RECHAZADA", "Rechazadas", url_for('laboratorio.resultados', filtro='rechazadas')),
@@ -30,7 +30,7 @@
         <a class="etapa" href="{{ url }}">
           <div class="d-flex justify-content-between align-items-start">
             <div class="numero">{{ r.por_estado.get(clave, 0)|num }}</div>
-            {{ estado(clave) }}
+            {{ estado(clave, muestra=true) }}
           </div>
           <div class="small text-body-secondary">{{ texto }}</div>
         </a>

@@ -33,6 +33,8 @@ ESTADOS = {
     "Vencida": ("Vencida", "danger"),
     "Aún no corresponde": ("Aún no corresponde", "light"),
 }
+# Nombres propios de los estados de la muestra (el remito conserva "En tránsito")
+ESTADOS_MUESTRA = {**ESTADOS, "EN_TRANSITO": ("Siendo analizada", "primary")}
 
 
 def validar(al_fallar):
@@ -79,3 +81,4 @@ def registrar_filtros(app):
 
     # global (no context_processor) para que también lo vean las macros importadas
     app.jinja_env.globals["ESTADOS"] = ESTADOS
+    app.jinja_env.globals["ESTADOS_MUESTRA"] = ESTADOS_MUESTRA

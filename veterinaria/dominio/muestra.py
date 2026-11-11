@@ -78,7 +78,7 @@ class Empaquetada(EstadoMuestra):
 
 
 class EnTransito(EstadoMuestra):
-    nombre, etiqueta = "EN_TRANSITO", "En tránsito"
+    nombre, etiqueta = "EN_TRANSITO", "Siendo analizada"
 
     def recibir(self, muestra, fecha_hora, detalle):
         muestra._transicionar(Recibida, fecha_hora, detalle or "Recibida en laboratorio: muestra viable")

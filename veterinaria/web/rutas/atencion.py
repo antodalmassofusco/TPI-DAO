@@ -1,14 +1,18 @@
-"""Agenda de turnos y proceso 3: atenciones clínicas y órdenes de derivación."""
+"""Agenda de turnos, vista diaria del veterinario y proceso 3: atenciones clínicas y órdenes de derivación."""
+from datetime import timedelta
+
 from flask import Blueprint, flash, redirect, render_template, request, url_for
 
 from veterinaria.config import DURACION_TURNO_MIN, PRIORIDADES, TIPOS_CONSULTA
+from veterinaria.excepciones import ValidacionError
 from veterinaria.persistencia import repositorios as r
 from veterinaria.servicios.catalogos import CatalogoService
 from veterinaria.servicios.consultas import ConsultaService
 from veterinaria.servicios.mascotas import MascotaService
+from veterinaria.servicios.mi_dia import MiDiaService
 from veterinaria.servicios.turnos import TurnoService
 from veterinaria.servicios.vacunas import PENDIENTE, VENCIDA, VacunaService
-from veterinaria.utils.fechas import ahora, hoy
+from veterinaria.utils.fechas import ahora, hoy, parse_fecha
 from veterinaria.web.util import validar
 
 bp = Blueprint("atencion", __name__)
@@ -55,6 +59,24 @@ def cancelar(turno_id):
     TurnoService().cancelar(turno_id)
     flash("Turno cancelado.", "success")
     return redirect(request.referrer or url_for(".agenda"))
+
+
+# ------------------------------------------------------------------ Mi día (vista diaria del veterinario)
+@bp.get("/mi-dia")
+def mi_dia():
+    veterinarios = _veterinarios()
+    veterinario = request.args.get("veterinario", type=int)
+    if veterinario not in {v for v, _ in veterinarios}:
+        veterinario = veterinarios[0][0] if veterinarios else None
+    try:
+        dia = parse_fecha(request.args.get("fecha") or hoy())
+    except ValidacionError:
+        flash("La fecha no es válida; se muestra el día de hoy.", "warning")
+        dia = hoy()
+    resumen = MiDiaService().resumen(veterinario, dia) if veterinario else None
+    return render_template("mi_dia.html", veterinarios=veterinarios, veterinario=veterinario, dia=dia,
+                           anterior=(dia - timedelta(days=1)).isoformat(), siguiente=(dia + timedelta(days=1)).isoformat(),
+                           es_hoy=dia == hoy(), r=resumen)
 
 
 # ------------------------------------------------------------------ Atención clínica

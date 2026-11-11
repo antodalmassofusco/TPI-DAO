@@ -27,7 +27,7 @@
           <li class="list-group-item d-flex align-items-center gap-2">
             <a href="{{ url_for('laboratorio.trazabilidad', codigo=m.codigo) }}" class="fw-semibold">{{ m.codigo }}</a>
             <span class="small">{{ tipos[m.tipo_analisis_id].nombre }}</span>
-            <span class="ms-auto">{{ estado(m.estado) }}</span>
+            <span class="ms-auto">{{ estado(m.estado, muestra=true) }}</span>
           </li>
         {% else %}<li class="list-group-item">{{ vacio("Todavía no hay órdenes para esta atención.", "eyedropper") }}</li>{% endfor %}
       </ul>

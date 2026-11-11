@@ -32,7 +32,7 @@
             <div class="d-flex align-items-center gap-2">
               <a href="{{ url_for('laboratorio.trazabilidad', codigo=m.codigo) }}" class="fw-semibold">{{ m.codigo }}</a>
               <span class="small">{{ m.analisis }} · {{ m.mascota }}</span>
-              <span class="ms-auto">{{ estado(m.estado_clave) }}</span>
+              <span class="ms-auto">{{ estado(m.estado_clave, muestra=true) }}</span>
             </div>
             {% if m.motivo_rechazo %}<div class="small text-danger mt-1"><i class="bi bi-x-octagon"></i> {{ m.motivo_rechazo }}</div>{% endif %}
           </li>

@@ -1,7 +1,16 @@
 {% extends "base.html" %}
 {% from "_macros.html" import vacio %}
+{% macro tarjeta_grafico(g, n) %}
+  {% set icono = {'columnas': 'bar-chart', 'lineas': 'graph-up', 'torta': 'pie-chart'}.get(g.tipo, 'bar-chart-steps') %}
+  {% set alto = 300 if g.tipo in ('columnas', 'lineas') else (240 if g.tipo == 'torta' else [180, 70 + g.etiquetas|length * 32]|max) %}
+  <div class="card h-100">
+    <div class="card-header"><i class="bi bi-{{ icono }}"></i>{{ g.titulo }}</div>
+    <div class="card-body"><div style="height: {{ alto }}px{{ '; max-width: 560px; margin: 0 auto' if g.tipo == 'torta' }}"><canvas id="grafico-{{ n }}" role="img" aria-label="{{ g.titulo }}. El detalle está en la tabla de abajo."></canvas></div>
+      {% if g.nota %}<div class="small text-body-secondary mt-2"><i class="bi bi-info-circle"></i> {{ g.nota }}</div>{% endif %}</div>
+  </div>
+{% endmacro %}
 {% set activo = "reportes.reportes" %}
-{% block titulo %}Reportes{% endblock %}
+{% block titulo %}Informes{% endblock %}
 {% block subtitulo %}Indicadores de atención, logística de muestras y facturación{% endblock %}
 {% block contenido %}
 {# Catálogo de reportes agrupados por tema #}
@@ -19,7 +28,7 @@
       </div>
       <div class="list-group list-group-flush rounded-bottom">
         {% for r in lista %}
-          <a href="{{ url_for('reportes.reportes', reporte=r.__name__, desde=desde if r.usa_rango_fechas else none, hasta=hasta if r.usa_rango_fechas else none) }}"
+          <a href="{{ url_for('reportes.reportes', reporte=r.__name__, periodo=(periodo or none) if r.usa_rango_fechas else none, desde=desde if r.usa_rango_fechas and not periodo else none, hasta=hasta if r.usa_rango_fechas and not periodo else none) }}"
              class="list-group-item list-group-item-action small d-flex align-items-center gap-2 {{ 'fw-semibold text-' ~ color if r is sameas clase }}">
             <i class="bi bi-{{ 'caret-right-fill' if r is sameas clase else 'dot' }}"></i>{{ r.titulo }}
           </a>
@@ -38,42 +47,62 @@
       <span class="fw-semibold">{{ clase.titulo }}</span>
     </div>
     {% if clase.usa_rango_fechas %}
-      <div class="col-sm-4 col-lg-2"><label class="form-label">Desde</label><input type="date" class="form-control" name="desde" value="{{ desde }}"></div>
-      <div class="col-sm-4 col-lg-2"><label class="form-label">Hasta</label><input type="date" class="form-control" name="hasta" value="{{ hasta }}"></div>
+      <div class="col-sm-4 col-lg-2"><label class="form-label">Desde</label><input type="date" class="form-control" name="desde" value="{{ desde }}" onchange="this.form.periodo.value = ''"></div>
+      <div class="col-sm-4 col-lg-2"><label class="form-label">Hasta</label><input type="date" class="form-control" name="hasta" value="{{ hasta }}" onchange="this.form.periodo.value = ''"></div>
+      <input type="hidden" name="periodo" value="{{ periodo or '' }}">
     {% else %}
       <div class="col-lg-4 small text-body-secondary pb-2"><i class="bi bi-calendar-check"></i> Se calcula a la fecha de hoy.</div>
     {% endif %}
     <div class="col-sm-4 col-lg-3 d-flex gap-2">
       <button class="btn btn-primary flex-fill"><i class="bi bi-arrow-repeat"></i> Generar</button>
-      <a class="btn btn-outline-secondary" href="{{ url_for('reportes.descargar_csv', **request.args) }}" data-bs-toggle="tooltip" title="Descargar CSV"><i class="bi bi-download"></i></a>
-      <a class="btn btn-outline-danger" href="{{ url_for('reportes.descargar_pdf', **request.args) }}" data-bs-toggle="tooltip" title="Descargar PDF"><i class="bi bi-file-earmark-pdf"></i></a>
+      <a class="btn btn-outline-secondary" href="{{ url_for('reportes.descargar_csv', reporte=clase.__name__, desde=desde, hasta=hasta, periodo=periodo) }}" data-bs-toggle="tooltip" title="Descargar CSV"><i class="bi bi-download"></i></a>
+      <a class="btn btn-outline-danger" href="{{ url_for('reportes.descargar_pdf', reporte=clase.__name__, desde=desde, hasta=hasta, periodo=periodo) }}" data-bs-toggle="tooltip" title="Descargar PDF"><i class="bi bi-file-earmark-pdf"></i></a>
     </div>
   </div>
+  {% if clase.usa_rango_fechas %}
+  <div class="card-body pt-0 d-flex flex-wrap align-items-center gap-2">
+    <span class="small text-body-secondary me-1"><i class="bi bi-calendar-range"></i> Período:</span>
+    {% for clave, texto in periodos %}
+      <a class="btn btn-sm {{ 'btn-primary' if periodo == clave else 'btn-outline-primary' }}"
+         href="{{ url_for('reportes.reportes', reporte=clase.__name__, periodo=clave) }}">{{ texto }}</a>
+    {% endfor %}
+    <span class="btn btn-sm {{ 'btn-secondary' if not periodo else 'btn-outline-secondary disabled' }}" aria-disabled="true">Personalizado</span>
+  </div>
+  {% endif %}
   <div class="card-footer bg-transparent small text-body-secondary">{{ clase.descripcion }}</div>
 </form>
 
 {% if resultado %}
 <div class="row g-3 mb-3">
-  <div class="col-xl-{{ 5 if grafico else 12 }}">
+  <div class="col-xl-{{ 5 if graficos else 12 }}">
     <div class="card h-100">
       <div class="card-header"><i class="bi bi-lightbulb"></i>Resumen</div>
       <div class="card-body">
         {% for linea in resultado.resumen %}
           <p class="{{ 'mb-2' if not loop.last }} {{ 'fw-semibold' if loop.first }} {{ 'ps-3 small' if linea.startswith('  ') }}">{{ linea }}</p>
         {% endfor %}
+        {% if resultado.conclusiones %}
+          <div class="conclusiones mt-3">
+            <div class="fw-semibold mb-2"><i class="bi bi-signpost"></i> Conclusiones para la toma de decisiones</div>
+            <ul class="mb-0 ps-3">
+              {% for linea in resultado.conclusiones %}<li class="small mb-1">{{ linea }}</li>{% endfor %}
+            </ul>
+          </div>
+        {% endif %}
       </div>
     </div>
   </div>
-  {% if grafico %}
-  <div class="col-xl-7">
-    <div class="card h-100">
-      <div class="card-header"><i class="bi bi-{{ 'bar-chart' if grafico.tipo == 'columnas' else 'bar-chart-steps' }}"></i>{{ grafico.titulo }}</div>
-      {% set alto = 300 if grafico.tipo == 'columnas' else [180, 70 + grafico.etiquetas|length * 32]|max %}
-      <div class="card-body"><div style="height: {{ alto }}px"><canvas id="grafico" role="img" aria-label="{{ grafico.titulo }}. El detalle está en la tabla de abajo."></canvas></div></div>
-    </div>
-  </div>
+  {% if graficos %}
+  <div class="col-xl-7">{{ tarjeta_grafico(graficos[0], 0) }}</div>
   {% endif %}
 </div>
+{% if graficos|length > 1 %}
+<div class="row g-3 mb-3">
+  {% for g in graficos[1:] %}
+    <div class="col-xl-{{ 12 if graficos|length == 2 else 6 }}">{{ tarjeta_grafico(g, loop.index) }}</div>
+  {% endfor %}
+</div>
+{% endif %}
 
 <div class="card">
   <div class="card-header"><i class="bi bi-table"></i>{{ resultado.titulo }} <span class="badge text-bg-light">{{ resultado.filas|length }} filas</span></div>
@@ -95,82 +124,143 @@
 {% endblock %}
 
 {% block scripts %}
-{% if grafico %}
+{% if graficos %}
 <script src="{{ url_for('static', filename='vendor/chart.umd.min.js') }}"></script>
 <script>
-  // Paleta categórica validada (orden fijo: el color sigue a la serie, nunca a su posición)
-  const PALETA = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#6250d6', '#e34948'];
+  // Los colores, los textos de las puntas y las notas vienen preparados desde el reporte
+  // (ResultadoReporte.graficos_preparados), así la pantalla y el PDF muestran lo mismo.
   const TEXTO = '#52514e', GRILLA = '#eef1f5', SUPERFICIE = '#ffffff';
-  const g = {{ grafico|tojson }};
-  const horizontal = g.tipo === 'barras';
-  const apilado = g.series.length > 1;
-  const formato = v => g.unidad === '$'
-      ? '$ ' + v.toLocaleString('es-AR', { maximumFractionDigits: 0 })
-      : v.toLocaleString('es-AR', { maximumFractionDigits: 1 }) + (g.unidad === 'h' ? ' h' : '');
-  // Extremo redondeado sólo en el final de la barra (el último tramo); la base queda recta
-  const punta = horizontal ? { topRight: 4, bottomRight: 4 } : { topLeft: 4, topRight: 4 };
+  const FUENTE = '600 11px "Segoe UI", system-ui, sans-serif';
+  const LEYENDA = { color: TEXTO, boxWidth: 10, boxHeight: 10, useBorderRadius: true, borderRadius: 2 };
 
-  // Total escrito en la punta de cada barra/columna (etiqueta directa selectiva)
-  const totales = {
-    id: 'totales',
-    afterDatasetsDraw(chart) {
-      const { ctx } = chart;
-      const meta = chart.getSortedVisibleDatasetMetas();
-      if (!meta.length) return;
-      ctx.save();
-      ctx.font = '600 11px "Segoe UI", system-ui, sans-serif';
-      ctx.fillStyle = TEXTO;
-      g.etiquetas.forEach((_, i) => {
-        const visibles = meta.filter(m => chart.data.datasets[m.index].data[i]);
-        const total = visibles.reduce((suma, m) => suma + (chart.data.datasets[m.index].data[i] || 0), 0);
-        if (!total) return;
-        const barra = visibles[visibles.length - 1].data[i];
-        if (horizontal) {
-          ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-          ctx.fillText(formato(total), barra.x + 6, barra.y);
-        } else {
-          ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-          ctx.fillText(formato(total), barra.x, barra.y - 4);
-        }
-      });
-      ctx.restore();
-    }
-  };
+  function formatos(g) {
+    const formato = v => {
+      const n = v.toLocaleString('es-AR', { maximumFractionDigits: g.unidad === '$' ? 0 : 1 });
+      return g.unidad === '$' ? '$ ' + n : n + ({ h: ' h', '%': ' %' }[g.unidad] || '');
+    };
+    // Eje en pesos abreviado ($ 1,5 M o $ 300 mil) para que las marcas no se amontonen
+    const formatoEje = v => g.unidad !== '$' ? formato(v)
+        : Math.abs(v) >= 1e6 ? '$ ' + (v / 1e6).toLocaleString('es-AR', { maximumFractionDigits: 1 }) + ' M'
+        : Math.abs(v) >= 1e3 ? '$ ' + (v / 1e3).toLocaleString('es-AR', { maximumFractionDigits: 0 }) + ' mil' : formato(v);
+    return { formato, formatoEje };
+  }
 
-  new Chart(document.getElementById('grafico'), {
-    type: 'bar',
-    data: {
-      labels: g.etiquetas,
-      datasets: g.series.map((s, i) => ({
-        label: s.titulo, data: s.valores, backgroundColor: PALETA[s.color],
-        borderColor: SUPERFICIE, borderWidth: apilado ? 1 : 0, borderSkipped: false,
-        // redondeado sólo el tramo que queda en la punta (ninguna serie posterior tiene valor)
-        borderRadius: c => g.series.slice(i + 1).some(o => o.valores[c.dataIndex]) ? 0 : punta,
-        maxBarThickness: 24, categoryPercentage: 0.75, barPercentage: 0.9
-      }))
-    },
-    plugins: [totales],
-    options: {
-      indexAxis: horizontal ? 'y' : 'x', maintainAspectRatio: false, animation: false,
-      layout: { padding: horizontal ? { right: 72 } : { top: 22 } },
-      interaction: { mode: 'index', axis: horizontal ? 'y' : 'x', intersect: false },
-      plugins: {
-        legend: { display: apilado, position: 'top', align: 'start',
-                  labels: { color: TEXTO, boxWidth: 10, boxHeight: 10, useBorderRadius: true, borderRadius: 2 } },
-        tooltip: {
-          callbacks: {
-            label: c => ` ${c.dataset.label}: ${formato(c.parsed[horizontal ? 'x' : 'y'])}`,
-            footer: items => apilado ? 'Total: ' + formato(g.totales[items[0].dataIndex]) : ''
-          }
+  // Torta: cada porción con su color; la leyenda muestra valor y porcentaje
+  function torta(g, lienzo) {
+    new Chart(lienzo, {
+      type: 'pie',
+      data: { labels: g.etiquetas,
+              datasets: [{ data: g.totales, backgroundColor: g.colores, borderColor: SUPERFICIE, borderWidth: 2 }] },
+      options: {
+        maintainAspectRatio: false, animation: false,
+        plugins: {
+          legend: { position: 'right', onClick: null,
+                    labels: { ...LEYENDA, generateLabels: chart => g.etiquetas.map((e, i) => ({
+                      text: `${e}: ${g.puntas[i]}`, fillStyle: g.colores[i], strokeStyle: g.colores[i],
+                      fontColor: TEXTO, index: i })) } },
+          tooltip: { callbacks: { label: c => ` ${g.etiquetas[c.dataIndex]}: ${g.puntas[c.dataIndex]}` } }
         }
-      },
-      scales: {
-        [horizontal ? 'x' : 'y']: { stacked: apilado, beginAtZero: true, border: { display: false },
-                                    grid: { color: GRILLA }, ticks: { color: TEXTO, maxTicksLimit: 6, callback: v => formato(v) } },
-        [horizontal ? 'y' : 'x']: { stacked: apilado, grid: { display: false }, ticks: { color: TEXTO } }
       }
-    }
-  });
+    });
+  }
+
+  // Curvas: una línea por serie, con puntos en cada período
+  function lineas(g, lienzo) {
+    const { formato, formatoEje } = formatos(g);
+    new Chart(lienzo, {
+      type: 'line',
+      data: { labels: g.etiquetas,
+              datasets: g.series.map(s => ({ label: s.titulo, data: s.valores, borderColor: s.color,
+                                             backgroundColor: s.color, borderWidth: 2, cubicInterpolationMode: 'monotone',
+                                             pointRadius: 3, pointHoverRadius: 5,
+                                             pointBorderColor: SUPERFICIE, pointBorderWidth: 1.5 })) },
+      options: {
+        maintainAspectRatio: false, animation: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { display: g.leyenda, onClick: null, position: 'top', align: 'start', labels: LEYENDA },
+                   tooltip: { callbacks: { label: c => ` ${c.dataset.label}: ${formato(c.parsed.y)}`,
+                                           footer: items => 'Total: ' + formato(g.totales[items[0].dataIndex]) } } },
+        scales: { y: { beginAtZero: true, border: { display: false }, grid: { color: GRILLA },
+                       ticks: { color: TEXTO, maxTicksLimit: 6, callback: v => formatoEje(v) } },
+                  x: { grid: { display: false }, ticks: { color: TEXTO } } }
+      }
+    });
+  }
+
+  // Barras (horizontales) y columnas (verticales), apiladas si hay varias series
+  function barras(g, lienzo) {
+    const { formato, formatoEje } = formatos(g);
+    const horizontal = g.tipo === 'barras';
+    const apilado = g.series.length > 1;
+    // Extremo redondeado sólo en el final de la barra (el último tramo con valor); la base queda recta
+    const redondeo = horizontal ? { topRight: 4, bottomRight: 4 } : { topLeft: 4, topRight: 4 };
+    // Lugar para el texto más largo de las puntas, medido antes de dibujar
+    const medidor = document.createElement('canvas').getContext('2d');
+    medidor.font = FUENTE;
+    const anchoPuntas = Math.max(0, ...g.puntas.filter(Boolean).map(t => medidor.measureText(t).width));
+    // Texto en la punta de cada barra/columna: total, % o lo que el reporte haya definido
+    const puntas = {
+      id: 'puntas',
+      afterDatasetsDraw(chart) {
+        const { ctx, scales } = chart;
+        const valor = horizontal ? scales.x : scales.y, categoria = horizontal ? scales.y : scales.x;
+        ctx.save();
+        ctx.font = FUENTE;
+        ctx.fillStyle = TEXTO;
+        g.puntas.forEach((texto, i) => {
+          if (!texto) return;
+          const fin = valor.getPixelForValue(g.totales[i]), centro = categoria.getPixelForValue(i);
+          if (horizontal) {
+            ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+            ctx.fillText(texto, fin + 6, centro);
+          } else {
+            ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+            ctx.fillText(texto, centro, fin - 4);
+          }
+        });
+        ctx.restore();
+      }
+    };
+    new Chart(lienzo, {
+      type: 'bar',
+      data: {
+        labels: g.etiquetas,
+        datasets: g.series.map((s, i) => ({
+          label: s.titulo, data: s.valores, backgroundColor: s.color,
+          borderColor: SUPERFICIE, borderWidth: apilado ? 1 : 0, borderSkipped: false,
+          borderRadius: c => g.series.slice(i + 1).some(o => o.valores[c.dataIndex]) ? 0 : redondeo,
+          maxBarThickness: 24, categoryPercentage: 0.75, barPercentage: 0.9
+        }))
+      },
+      plugins: [puntas],
+      options: {
+        indexAxis: horizontal ? 'y' : 'x', maintainAspectRatio: false, animation: false,
+        layout: { padding: horizontal ? { right: anchoPuntas + 12 } : { top: 22 } },
+        interaction: { mode: 'index', axis: horizontal ? 'y' : 'x', intersect: false },
+        plugins: {
+          // La leyenda identifica las series; no se ocultan al hacer clic para que las puntas sigan valiendo
+          legend: { display: g.leyenda, onClick: null, position: 'top', align: 'start', labels: LEYENDA },
+          tooltip: {
+            filter: item => item.raw > 0,
+            callbacks: {
+              label: c => ` ${c.dataset.label}: ${formato(c.parsed[horizontal ? 'x' : 'y'])}`,
+              footer: items => items.length && apilado
+                  ? (g.puntas[items[0].dataIndex] || 'Total: ' + formato(g.totales[items[0].dataIndex])) : ''
+            }
+          }
+        },
+        scales: {
+          [horizontal ? 'x' : 'y']: { stacked: apilado, beginAtZero: true, border: { display: false },
+                                      grid: { color: GRILLA },
+                                      ticks: { color: TEXTO, maxTicksLimit: 6, callback: v => formatoEje(v) } },
+          [horizontal ? 'y' : 'x']: { stacked: apilado, grid: { display: false }, ticks: { color: TEXTO } }
+        }
+      }
+    });
+  }
+
+  const DIBUJAR = { torta, lineas, barras, columnas: barras };
+  ({{ graficos|tojson }}).forEach((g, n) => DIBUJAR[g.tipo](g, document.getElementById('grafico-' + n)));
 </script>
 {% endif %}
 {% endblock %}
