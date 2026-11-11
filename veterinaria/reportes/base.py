@@ -13,13 +13,32 @@ from veterinaria.persistencia.conexion import BaseDatos
 from veterinaria.utils.fechas import parse_fecha
 
 
+@dataclass(frozen=True)
+class Grafico:
+    """Qué gráfico acompaña a un reporte, elegido según lo que muestran los datos.
+
+    - "barras": barras horizontales para comparar categorías (clínicas, vacunas, etc.); con más de
+      una serie se apilan, así se ve el total y cómo se compone.
+    - "columnas": columnas verticales en orden cronológico, para la evolución en el tiempo.
+    """
+    etiqueta: str           # clave de la categoría (eje)
+    series: tuple           # ((clave, título), ...) en orden fijo: el color sigue a la serie, no a su posición
+    titulo: str
+    tipo: str = "barras"
+    unidad: str = ""        # "$", "h" o "" (cantidades)
+
+    @property
+    def apilado(self):
+        return len(self.series) > 1
+
+
 @dataclass
 class ResultadoReporte:
     titulo: str
     columnas: list          # [(clave, título)]
     filas: list             # [dict]
     resumen: list = field(default_factory=list)   # líneas de texto
-    grafico: tuple = None   # (clave_etiqueta, clave_valor) para un gráfico de barras
+    grafico: Grafico = None
     datos_grafico: list = None
 
     def a_csv(self) -> str:
@@ -35,12 +54,38 @@ class ResultadoReporte:
                 escritor.writerow([linea])
         return salida.getvalue()
 
+    def grafico_preparado(self, max_categorias: int = 15):
+        """Datos del gráfico listos para dibujar (Chart.js en pantalla, reportlab en el PDF).
+
+        Las barras se ordenan de mayor a menor total; las columnas (series de tiempo) mantienen el orden
+        cronológico. Cada serie conserva su número de color aunque otras queden vacías.
+        """
+        g = self.grafico
+        if not g or not self.datos_grafico:
+            return None
+        filas = [{**d, "_total": sum(d.get(clave) or 0 for clave, _ in g.series)} for d in self.datos_grafico]
+        if g.tipo == "barras":
+            filas = sorted((d for d in filas if d["_total"]), key=lambda d: d["_total"], reverse=True)[:max_categorias]
+        if not any(d["_total"] for d in filas):
+            return None
+        series = [{"titulo": titulo, "color": i, "valores": [d.get(clave) or 0 for d in filas]}
+                  for i, (clave, titulo) in enumerate(g.series)]
+        return {"titulo": g.titulo, "tipo": g.tipo, "unidad": g.unidad,
+                "etiquetas": [str(d[g.etiqueta]) for d in filas],
+                "totales": [round(d["_total"], 2) for d in filas],
+                "series": [s for s in series if any(s["valores"])]}
+
+    def a_pdf(self, subtitulo: str = "") -> bytes:
+        """Contenido PDF con el resumen, el gráfico y la tabla del reporte."""
+        from veterinaria.reportes.pdf import generar_pdf   # import diferido: reportlab sólo hace falta acá
+        return generar_pdf(self, subtitulo)
+
 
 class Reporte(ABC):
     titulo: str = ""
     descripcion: str = ""
     columnas: list = []
-    grafico: tuple = None
+    grafico: Grafico = None
     usa_rango_fechas: bool = True
 
     def __init__(self, bd=None):
@@ -52,7 +97,7 @@ class Reporte(ABC):
         filas = self.obtener_datos(filtros)
         filas = self.procesar(filas, filtros)
         return ResultadoReporte(self.titulo, self.columnas, filas, self.resumir(filas, filtros),
-                                self.grafico, self.datos_grafico(filas))
+                                self.grafico, self.datos_grafico(filas, filtros))
 
     # ---- Pasos con comportamiento por defecto (hooks) -------------------------
     def validar_filtros(self, filtros: dict) -> dict:
@@ -72,7 +117,7 @@ class Reporte(ABC):
     def resumir(self, filas: list, filtros: dict) -> list:
         return [f"Registros: {len(filas)}"]
 
-    def datos_grafico(self, filas: list) -> list:
+    def datos_grafico(self, filas: list, filtros: dict) -> list:
         return filas
 
     # ---- Paso obligatorio ---------------------------------------------------

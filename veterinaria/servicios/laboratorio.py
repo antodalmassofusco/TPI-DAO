@@ -68,6 +68,26 @@ class LaboratorioService:
             f["estado_etiqueta"] = ETIQUETAS_ESTADO[f["estado"]]
         return filas
 
+    def muestras_de_cliente(self, texto):
+        """Muestras de las mascotas de los clientes cuyo nombre o apellido contiene el texto buscado."""
+        patron = f"%{texto.strip()}%"
+        filas = self.bd.consultar("""
+            SELECT mu.*, ta.nombre AS analisis, m.nombre AS mascota, m.especie,
+                   c.apellido || ', ' || c.nombre AS responsable, cl.nombre AS clinica
+            FROM muestra mu
+            JOIN tipo_analisis ta ON ta.id = mu.tipo_analisis_id
+            JOIN orden_derivacion o ON o.id = mu.orden_id
+            JOIN consulta co ON co.id = o.consulta_id
+            JOIN mascota m ON m.id = co.mascota_id
+            JOIN cliente c ON c.id = m.cliente_id
+            JOIN clinica cl ON cl.id = co.clinica_id
+            WHERE c.nombre LIKE ? OR c.apellido LIKE ?
+               OR c.nombre || ' ' || c.apellido LIKE ? OR c.apellido || ' ' || c.nombre LIKE ?
+            ORDER BY c.apellido, c.nombre, mu.fecha_extraccion DESC""", [patron] * 4)
+        for f in filas:
+            f["estado_etiqueta"] = ETIQUETAS_ESTADO[f["estado"]]
+        return filas
+
     def trazabilidad(self, codigo):
         """Recorrido completo de una muestra: datos, bitácora de estados, envío y resultado."""
         muestra = self.bd.consultar_uno("""

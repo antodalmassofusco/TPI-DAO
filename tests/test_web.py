@@ -45,6 +45,10 @@ class TestWeb(unittest.TestCase):
                       "ReporteVacunasPendientes", "ReporteFacturacion", "ReporteTiemposMuestras"):
             self.assertIn("<table", self.ok(f"/reportes?reporte={clase}"))
             self.assertEqual(self.web.get(f"/reportes/csv?reporte={clase}").status_code, 200)
+            pdf = self.web.get(f"/reportes/pdf?reporte={clase}")
+            self.assertEqual(pdf.status_code, 200, clase)
+            self.assertEqual(pdf.mimetype, "application/pdf", clase)
+            self.assertTrue(pdf.get_data().startswith(b"%PDF"), clase)
 
     def test_ids_inexistentes_no_rompen(self):
         for url in ["/clientes?editar=99999", "/mascotas?editar=99999", "/mascotas/99999/historia",
@@ -56,6 +60,15 @@ class TestWeb(unittest.TestCase):
         respuesta = self.web.get("/reportes/csv?reporte=ReporteFacturacion&desde=2026-12-01&hasta=2026-01-01",
                                  follow_redirects=True)
         self.assertIn("no puede ser posterior", respuesta.get_data(as_text=True))
+
+    def test_trazabilidad_busca_por_cliente(self):
+        fila = self.bd.consultar_uno("""
+            SELECT mu.codigo, c.apellido FROM muestra mu
+            JOIN orden_derivacion o ON o.id = mu.orden_id JOIN consulta co ON co.id = o.consulta_id
+            JOIN mascota m ON m.id = co.mascota_id JOIN cliente c ON c.id = m.cliente_id LIMIT 1""")
+        html = self.ok(f"/laboratorio/trazabilidad?cliente={fila['apellido']}")
+        self.assertIn(fila["codigo"], html)
+        self.assertIn("No hay muestras de clientes", self.ok("/laboratorio/trazabilidad?cliente=zzzinexistente"))
 
     def test_remito_muestra_su_bitacora(self):
         remito = self.bd.escalar("SELECT id FROM remito WHERE estado = 'ANULADO'")

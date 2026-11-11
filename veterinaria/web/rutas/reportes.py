@@ -1,11 +1,11 @@
-"""Reportes: tabla, resumen, gráfico (Chart.js) y descarga en CSV."""
-from datetime import timedelta
+"""Reportes: tabla, resumen, gráfico (Chart.js) y descarga en CSV y PDF."""
+from datetime import datetime, timedelta
 
 from flask import Blueprint, Response, flash, redirect, render_template, request, url_for
 
 from veterinaria.excepciones import VeterinariaError
-from veterinaria.reportes.reportes import REPORTES
-from veterinaria.utils.fechas import hoy
+from veterinaria.reportes.reportes import CATEGORIAS, REPORTES
+from veterinaria.utils.fechas import hoy, parse_fecha
 
 bp = Blueprint("reportes", __name__)
 CLAVES = {clase.__name__: clase for clase in REPORTES}
@@ -26,14 +26,10 @@ def reportes():
     except VeterinariaError as e:
         flash(str(e), "warning")
         clase, desde, hasta, resultado = REPORTES[0], "", "", None
-    grafico = None
-    if resultado and resultado.grafico and resultado.datos_grafico:
-        etiqueta, valor = resultado.grafico
-        datos = sorted((d for d in resultado.datos_grafico if d.get(valor)), key=lambda d: d[valor], reverse=True)[:15]
-        grafico = {"etiquetas": [str(d[etiqueta]) for d in datos], "valores": [d[valor] for d in datos],
-                   "titulo": dict(resultado.columnas).get(valor, valor.capitalize())}
-    return render_template("reportes.html", reportes=REPORTES, clase=clase, desde=desde, hasta=hasta,
-                           resultado=resultado, grafico=grafico)
+    grafico = resultado.grafico_preparado() if resultado else None
+    categoria = next(c for c in CATEGORIAS if clase in c[-1])
+    return render_template("reportes.html", categorias=CATEGORIAS, categoria=categoria, clase=clase,
+                           desde=desde, hasta=hasta, resultado=resultado, grafico=grafico)
 
 
 @bp.get("/reportes/csv")
@@ -46,3 +42,24 @@ def descargar_csv():
     # el BOM inicial hace que Excel reconozca el archivo como UTF-8 (acentos)
     return Response("﻿" + resultado.a_csv(), mimetype="text/csv",
                     headers={"Content-Disposition": f"attachment; filename={clase.__name__}.csv"})
+
+
+@bp.get("/reportes/pdf")
+def descargar_pdf():
+    try:
+        clase, desde, hasta, resultado = _generar()
+    except VeterinariaError as e:
+        flash(str(e), "warning")
+        return redirect(url_for(".reportes"))
+    formato = "%d/%m/%Y"
+    if clase.usa_rango_fechas:
+        periodo = f"Período: {parse_fecha(desde).strftime(formato)} al {parse_fecha(hasta).strftime(formato)}"
+    else:
+        periodo = f"Calculado al {hoy().strftime(formato)}"
+    try:
+        contenido = resultado.a_pdf(f"{periodo} · Emitido el {datetime.now().strftime(formato + ' %H:%M')}")
+    except ImportError:
+        flash("Para exportar a PDF hay que instalar las dependencias: pip install -r requirements.txt", "warning")
+        return redirect(url_for(".reportes", **request.args))
+    return Response(contenido, mimetype="application/pdf",
+                    headers={"Content-Disposition": f"attachment; filename={clase.__name__}.pdf"})

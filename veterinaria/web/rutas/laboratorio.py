@@ -57,11 +57,17 @@ def rechazar(muestra_id):
 
 @bp.get("/trazabilidad")
 def trazabilidad():
+    # Se busca por nombre de cliente; el código de muestra se usa al elegir una muestra de la lista
+    # (y en los enlaces que llegan desde otras pantallas).
+    cliente = request.args.get("cliente", "").strip()
     codigo = request.args.get("codigo", "").strip()
-    traza = None
+    servicio = LaboratorioService()
+    traza, muestras = None, None
     if codigo:
         try:
-            traza = LaboratorioService().trazabilidad(codigo)
+            traza = servicio.trazabilidad(codigo)
         except VeterinariaError as e:
             flash(str(e), "warning")
-    return render_template("trazabilidad.html", codigo=codigo, t=traza)
+    elif cliente:
+        muestras = servicio.muestras_de_cliente(cliente)
+    return render_template("trazabilidad.html", cliente=cliente, codigo=codigo, t=traza, muestras=muestras)

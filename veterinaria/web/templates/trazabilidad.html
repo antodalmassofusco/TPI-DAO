@@ -1,18 +1,40 @@
 {% extends "base.html" %}
-{% from "_macros.html" import vacio %}
+{% from "_macros.html" import estado, vacio %}
 {% set activo = "laboratorio.trazabilidad" %}
 {% block titulo %}Trazabilidad de muestra{% endblock %}
 {% block subtitulo %}Recorrido completo desde la extracción hasta el diagnóstico{% endblock %}
 {% block contenido %}
 <form method="get" class="card mb-3"><div class="card-body d-flex gap-2">
   <div class="input-group" style="max-width: 420px">
-    <span class="input-group-text"><i class="bi bi-upc-scan"></i></span>
-    <input class="form-control" name="codigo" value="{{ codigo }}" placeholder="Código de muestra, por ejemplo M-000018" autofocus>
+    <span class="input-group-text"><i class="bi bi-search"></i></span>
+    <input class="form-control" name="cliente" value="{{ cliente }}" placeholder="Nombre o apellido del cliente" autofocus>
     <button class="btn btn-primary">Buscar</button>
   </div>
 </div></form>
 
-{% if t %}
+{% if muestras is not none %}
+<div class="card">
+  <div class="card-header"><i class="bi bi-person"></i>Muestras de clientes que coinciden con «{{ cliente }}»</div>
+  <div class="table-responsive tabla-scroll" style="max-height: 72vh">
+    <table class="table table-hover">
+      <thead><tr><th>Muestra</th><th>Cliente</th><th>Paciente</th><th>Análisis</th><th>Clínica</th><th>Extracción</th><th>Estado</th></tr></thead>
+      <tbody>
+      {% for m in muestras %}
+        <tr data-href="{{ url_for('laboratorio.trazabilidad', codigo=m.codigo, cliente=cliente) }}">
+          <td class="fw-semibold"><a href="{{ url_for('laboratorio.trazabilidad', codigo=m.codigo, cliente=cliente) }}">{{ m.codigo }}</a></td>
+          <td>{{ m.responsable }}</td>
+          <td>{{ m.mascota }} <span class="small text-body-secondary">({{ m.especie }})</span></td>
+          <td>{{ m.analisis }}</td><td>{{ m.clinica }}</td>
+          <td class="small text-nowrap">{{ m.fecha_extraccion|fh }}</td>
+          <td>{{ estado(m.estado) }}</td>
+        </tr>
+      {% else %}<tr><td colspan="7">{{ vacio("No hay muestras de clientes con ese nombre.", "search") }}</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% elif t %}
+{% if cliente %}<a href="{{ url_for('laboratorio.trazabilidad', cliente=cliente) }}" class="btn btn-sm btn-light mb-3"><i class="bi bi-arrow-left"></i> Volver a las muestras de «{{ cliente }}»</a>{% endif %}
 <div class="row g-3">
   <div class="col-xl-5">
     {% include "_traza.html" %}
@@ -64,6 +86,6 @@
   </div>
 </div>
 {% elif not codigo %}
-  {{ vacio("Ingresá el código de una muestra para ver su recorrido.", "signpost-split") }}
+  {{ vacio("Ingresá el nombre de un cliente para ver las muestras de sus mascotas.", "signpost-split") }}
 {% endif %}
 {% endblock %}

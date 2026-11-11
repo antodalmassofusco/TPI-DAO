@@ -195,7 +195,11 @@ class TestReportes(BaseTest):
         for clase in REPORTES:
             resultado = clase(self.bd).generar(desde=fh(-10)[:10], hasta=fh(10)[:10])
             self.assertIsInstance(resultado.filas, list, clase.__name__)
-        tiempos = REPORTES[-1](self.bd).generar(desde=fh(-10)[:10], hasta=fh(10)[:10])
+            grafico = resultado.grafico_preparado()
+            if grafico:
+                for serie in grafico["series"]:
+                    self.assertEqual(len(serie["valores"]), len(grafico["etiquetas"]), clase.__name__)
+        tiempos = ReporteTiemposMuestras(self.bd).generar(desde=fh(-10)[:10], hasta=fh(10)[:10])
         self.assertEqual(tiempos.filas[0]["h_transito"], 2.0)
 
     def test_tiempos_incluyen_rechazadas_al_llegar(self):

@@ -4,13 +4,38 @@
 {% block titulo %}Reportes{% endblock %}
 {% block subtitulo %}Indicadores de atención, logística de muestras y facturación{% endblock %}
 {% block contenido %}
+{# Catálogo de reportes agrupados por tema #}
+<div class="row g-3 mb-3">
+  {% for nombre, icono, color, descripcion, lista in categorias %}
+  {% set actual = categoria[0] == nombre %}
+  <div class="col-sm-6 col-xl-3">
+    <div class="card h-100 categoria-reporte {{ 'activa border border-' ~ color if actual }}">
+      <div class="card-body pb-2 d-flex align-items-center gap-3">
+        <div class="kpi-icono bg-{{ color }}-subtle text-{{ color }}"><i class="bi bi-{{ icono }}"></i></div>
+        <div>
+          <div class="fw-semibold">{{ nombre }}</div>
+          <div class="small text-body-secondary">{{ descripcion }}</div>
+        </div>
+      </div>
+      <div class="list-group list-group-flush rounded-bottom">
+        {% for r in lista %}
+          <a href="{{ url_for('reportes.reportes', reporte=r.__name__, desde=desde if r.usa_rango_fechas else none, hasta=hasta if r.usa_rango_fechas else none) }}"
+             class="list-group-item list-group-item-action small d-flex align-items-center gap-2 {{ 'fw-semibold text-' ~ color if r is sameas clase }}">
+            <i class="bi bi-{{ 'caret-right-fill' if r is sameas clase else 'dot' }}"></i>{{ r.titulo }}
+          </a>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
 <form method="get" class="card mb-3">
+  <input type="hidden" name="reporte" value="{{ clase.__name__ }}">
   <div class="card-body row g-2 align-items-end">
-    <div class="col-lg-5">
-      <label class="form-label">Reporte</label>
-      <select class="form-select" name="reporte" onchange="this.form.submit()">
-        {% for r in reportes %}<option value="{{ r.__name__ }}" {% if r is sameas clase %}selected{% endif %}>{{ r.titulo }}</option>{% endfor %}
-      </select>
+    <div class="col-lg-5 d-flex align-items-center gap-2 pb-1">
+      <span class="badge rounded-pill bg-{{ categoria[2] }}-subtle text-{{ categoria[2] }}-emphasis"><i class="bi bi-{{ categoria[1] }}"></i> {{ categoria[0] }}</span>
+      <span class="fw-semibold">{{ clase.titulo }}</span>
     </div>
     {% if clase.usa_rango_fechas %}
       <div class="col-sm-4 col-lg-2"><label class="form-label">Desde</label><input type="date" class="form-control" name="desde" value="{{ desde }}"></div>
@@ -21,6 +46,7 @@
     <div class="col-sm-4 col-lg-3 d-flex gap-2">
       <button class="btn btn-primary flex-fill"><i class="bi bi-arrow-repeat"></i> Generar</button>
       <a class="btn btn-outline-secondary" href="{{ url_for('reportes.descargar_csv', **request.args) }}" data-bs-toggle="tooltip" title="Descargar CSV"><i class="bi bi-download"></i></a>
+      <a class="btn btn-outline-danger" href="{{ url_for('reportes.descargar_pdf', **request.args) }}" data-bs-toggle="tooltip" title="Descargar PDF"><i class="bi bi-file-earmark-pdf"></i></a>
     </div>
   </div>
   <div class="card-footer bg-transparent small text-body-secondary">{{ clase.descripcion }}</div>
@@ -41,8 +67,9 @@
   {% if grafico %}
   <div class="col-xl-7">
     <div class="card h-100">
-      <div class="card-header"><i class="bi bi-bar-chart"></i>{{ grafico.titulo }}</div>
-      <div class="card-body"><div style="height: {{ [160, 40 + grafico.valores|length * 28]|max }}px"><canvas id="grafico"></canvas></div></div>
+      <div class="card-header"><i class="bi bi-{{ 'bar-chart' if grafico.tipo == 'columnas' else 'bar-chart-steps' }}"></i>{{ grafico.titulo }}</div>
+      {% set alto = 300 if grafico.tipo == 'columnas' else [180, 70 + grafico.etiquetas|length * 32]|max %}
+      <div class="card-body"><div style="height: {{ alto }}px"><canvas id="grafico" role="img" aria-label="{{ grafico.titulo }}. El detalle está en la tabla de abajo."></canvas></div></div>
     </div>
   </div>
   {% endif %}
@@ -71,19 +98,77 @@
 {% if grafico %}
 <script src="{{ url_for('static', filename='vendor/chart.umd.min.js') }}"></script>
 <script>
+  // Paleta categórica validada (orden fijo: el color sigue a la serie, nunca a su posición)
+  const PALETA = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#6250d6', '#e34948'];
+  const TEXTO = '#52514e', GRILLA = '#eef1f5', SUPERFICIE = '#ffffff';
+  const g = {{ grafico|tojson }};
+  const horizontal = g.tipo === 'barras';
+  const apilado = g.series.length > 1;
+  const formato = v => g.unidad === '$'
+      ? '$ ' + v.toLocaleString('es-AR', { maximumFractionDigits: 0 })
+      : v.toLocaleString('es-AR', { maximumFractionDigits: 1 }) + (g.unidad === 'h' ? ' h' : '');
+  // Extremo redondeado sólo en el final de la barra (el último tramo); la base queda recta
+  const punta = horizontal ? { topRight: 4, bottomRight: 4 } : { topLeft: 4, topRight: 4 };
+
+  // Total escrito en la punta de cada barra/columna (etiqueta directa selectiva)
+  const totales = {
+    id: 'totales',
+    afterDatasetsDraw(chart) {
+      const { ctx } = chart;
+      const meta = chart.getSortedVisibleDatasetMetas();
+      if (!meta.length) return;
+      ctx.save();
+      ctx.font = '600 11px "Segoe UI", system-ui, sans-serif';
+      ctx.fillStyle = TEXTO;
+      g.etiquetas.forEach((_, i) => {
+        const visibles = meta.filter(m => chart.data.datasets[m.index].data[i]);
+        const total = visibles.reduce((suma, m) => suma + (chart.data.datasets[m.index].data[i] || 0), 0);
+        if (!total) return;
+        const barra = visibles[visibles.length - 1].data[i];
+        if (horizontal) {
+          ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+          ctx.fillText(formato(total), barra.x + 6, barra.y);
+        } else {
+          ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+          ctx.fillText(formato(total), barra.x, barra.y - 4);
+        }
+      });
+      ctx.restore();
+    }
+  };
+
   new Chart(document.getElementById('grafico'), {
     type: 'bar',
     data: {
-      labels: {{ grafico.etiquetas|tojson }},
-      datasets: [{ label: {{ grafico.titulo|tojson }}, data: {{ grafico.valores|tojson }},
-                   backgroundColor: '#3fb8af', borderRadius: 4, maxBarThickness: 22 }]
+      labels: g.etiquetas,
+      datasets: g.series.map((s, i) => ({
+        label: s.titulo, data: s.valores, backgroundColor: PALETA[s.color],
+        borderColor: SUPERFICIE, borderWidth: apilado ? 1 : 0, borderSkipped: false,
+        // redondeado sólo el tramo que queda en la punta (ninguna serie posterior tiene valor)
+        borderRadius: c => g.series.slice(i + 1).some(o => o.valores[c.dataIndex]) ? 0 : punta,
+        maxBarThickness: 24, categoryPercentage: 0.75, barPercentage: 0.9
+      }))
     },
+    plugins: [totales],
     options: {
-      indexAxis: 'y', maintainAspectRatio: false, animation: false,
-      plugins: { legend: { display: false },
-                 tooltip: { callbacks: { label: c => c.parsed.x.toLocaleString('es-AR') } } },
-      scales: { x: { beginAtZero: true, grid: { color: '#eef1f5' }, ticks: { callback: v => v.toLocaleString('es-AR') } },
-                y: { grid: { display: false } } }
+      indexAxis: horizontal ? 'y' : 'x', maintainAspectRatio: false, animation: false,
+      layout: { padding: horizontal ? { right: 72 } : { top: 22 } },
+      interaction: { mode: 'index', axis: horizontal ? 'y' : 'x', intersect: false },
+      plugins: {
+        legend: { display: apilado, position: 'top', align: 'start',
+                  labels: { color: TEXTO, boxWidth: 10, boxHeight: 10, useBorderRadius: true, borderRadius: 2 } },
+        tooltip: {
+          callbacks: {
+            label: c => ` ${c.dataset.label}: ${formato(c.parsed[horizontal ? 'x' : 'y'])}`,
+            footer: items => apilado ? 'Total: ' + formato(g.totales[items[0].dataIndex]) : ''
+          }
+        }
+      },
+      scales: {
+        [horizontal ? 'x' : 'y']: { stacked: apilado, beginAtZero: true, border: { display: false },
+                                    grid: { color: GRILLA }, ticks: { color: TEXTO, maxTicksLimit: 6, callback: v => formato(v) } },
+        [horizontal ? 'y' : 'x']: { stacked: apilado, grid: { display: false }, ticks: { color: TEXTO } }
+      }
     }
   });
 </script>

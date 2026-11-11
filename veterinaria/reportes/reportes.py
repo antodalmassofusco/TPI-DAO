@@ -1,11 +1,16 @@
 """Reportes concretos."""
 from collections import defaultdict
+from datetime import timedelta
 
 from veterinaria.persistencia import repositorios as r
-from veterinaria.reportes.base import Reporte, porcentaje
-from veterinaria.servicios.vacunas import VacunaService
-from veterinaria.utils.fechas import hoy
+from veterinaria.reportes.base import Grafico, Reporte, porcentaje
+from veterinaria.servicios.vacunas import PENDIENTE, VENCIDA, VacunaService
+from veterinaria.utils.fechas import hoy, parse_fecha
 from veterinaria.utils.formato import moneda, numero
+
+
+def _corto(clinica):
+    return clinica.replace("Clínica ", "")
 
 
 class ReporteAtencionesDerivaciones(Reporte):
@@ -15,7 +20,8 @@ class ReporteAtencionesDerivaciones(Reporte):
     columnas = [("clinica", "Clínica"), ("tipo", "Tipo de atención"), ("atenciones", "Atenciones"),
                 ("con_derivacion", "Con derivación"), ("pct_derivacion", "% derivación"),
                 ("muestras", "Muestras derivadas"), ("urgentes", "Órdenes urgentes")]
-    grafico = ("etiqueta", "atenciones")
+    grafico = Grafico("clinica", (("con_derivacion", "Con derivación"), ("sin_derivacion", "Sin derivación")),
+                      "Atenciones por clínica")
 
     def obtener_datos(self, f):
         return self.bd.consultar("""
@@ -33,8 +39,17 @@ class ReporteAtencionesDerivaciones(Reporte):
     def procesar(self, filas, f):
         for fila in filas:
             fila["pct_derivacion"] = porcentaje(fila["con_derivacion"], fila["atenciones"])
-            fila["etiqueta"] = f"{fila['clinica'].replace('Clínica ', '')} · {fila['tipo'].title()}"
         return filas
+
+    def datos_grafico(self, filas, f):
+        # Por clínica, cuántas atenciones derivaron al laboratorio y cuántas no
+        por_clinica = {}
+        for x in filas:
+            g = por_clinica.setdefault(x["clinica"], {"clinica": _corto(x["clinica"]),
+                                                      "con_derivacion": 0, "sin_derivacion": 0})
+            g["con_derivacion"] += x["con_derivacion"]
+            g["sin_derivacion"] += x["atenciones"] - x["con_derivacion"]
+        return list(por_clinica.values())
 
     def resumir(self, filas, f):
         total = sum(x["atenciones"] for x in filas)
@@ -56,7 +71,8 @@ class ReporteMuestrasRechazadas(Reporte):
     columnas = [("codigo", "Muestra"), ("fecha_rechazo", "Fecha rechazo"), ("clinica", "Clínica"),
                 ("analisis", "Análisis"), ("remito", "Remito"), ("transportista", "Transportista"),
                 ("causa", "Causa"), ("motivo_rechazo", "Detalle")]
-    grafico = ("causa", "cantidad")
+    CAUSAS = ("Precinto roto", "Cadena de frío", "Tiempo de viabilidad", "Otra")
+    grafico = Grafico("transportista", tuple((c, c) for c in CAUSAS), "Muestras rechazadas por transportista y causa")
 
     def obtener_datos(self, f):
         return self.bd.consultar("""
@@ -108,12 +124,14 @@ class ReporteMuestrasRechazadas(Reporte):
                    f"({numero(porcentaje(t['rechazadas'], t['enviadas']), 1)} %)" for t in totales]
         return lineas
 
-    def datos_grafico(self, filas):
-        # El gráfico muestra la cantidad por causa en lugar del detalle
-        por_causa = defaultdict(int)
-        for fila in filas:
-            por_causa[fila["causa"]] += 1
-        return [{"causa": c, "cantidad": n} for c, n in por_causa.items()]
+    def datos_grafico(self, filas, f):
+        # Una barra por transportista, dividida según la causa del rechazo
+        por_transportista = {}
+        for x in filas:
+            g = por_transportista.setdefault(x["transportista"], {"transportista": x["transportista"],
+                                                                  **{c: 0 for c in self.CAUSAS}})
+            g[x["causa"]] += 1
+        return list(por_transportista.values())
 
 
 class ReporteTratamientos(Reporte):
@@ -122,6 +140,8 @@ class ReporteTratamientos(Reporte):
     columnas = [("fecha_hora", "Fecha"), ("clinica", "Clínica"), ("mascota", "Paciente"), ("especie", "Especie"),
                 ("tipo", "Tipo"), ("diagnostico", "Diagnóstico"), ("tratamiento", "Tratamiento"),
                 ("vacunas", "Vacunas aplicadas")]
+    grafico = Grafico("semana", (("con_tratamiento", "Con tratamiento"), ("solo_vacunas", "Sólo vacunación")),
+                      "Atenciones por semana", tipo="columnas")
 
     def obtener_datos(self, f):
         return self.bd.consultar("""
@@ -146,6 +166,21 @@ class ReporteTratamientos(Reporte):
         return [f"Atenciones con tratamiento o vacunación: {len(filas)}",
                 "Dosis aplicadas: " + (", ".join(f"{d['vacuna']}: {d['dosis']}" for d in dosis) or "ninguna")]
 
+    def datos_grafico(self, filas, f):
+        # Evolución semanal: se incluyen las semanas sin atenciones para no ocultar huecos
+        def lunes(fecha):
+            return fecha - timedelta(days=fecha.weekday())
+        semanas = {}
+        semana, ultima = lunes(parse_fecha(f["desde"])), lunes(parse_fecha(f["hasta"]))
+        while semana <= ultima:
+            semanas[semana] = {"semana": semana.strftime("%d/%m"), "con_tratamiento": 0, "solo_vacunas": 0}
+            semana += timedelta(days=7)
+        for x in filas:
+            g = semanas.get(lunes(parse_fecha(x["fecha_hora"][:10])))
+            if g:
+                g["con_tratamiento" if (x["tratamiento"] or "").strip() else "solo_vacunas"] += 1
+        return list(semanas.values())
+
 
 class ReporteVacunasPendientes(Reporte):
     titulo = "Vacunas obligatorias pendientes"
@@ -155,7 +190,8 @@ class ReporteVacunasPendientes(Reporte):
                 ("responsable", "Responsable"), ("contacto", "Contacto"), ("vacuna", "Vacuna"),
                 ("estado", "Situación"), ("ultima", "Última dosis"), ("desde", "Correspondía desde"),
                 ("dias_atraso", "Días de atraso")]
-    grafico = ("vacuna", "cantidad")
+    grafico = Grafico("vacuna", ((PENDIENTE, "Nunca aplicada"), (VENCIDA, "Refuerzo vencido")),
+                      "Dosis pendientes por vacuna")
     usa_rango_fechas = False
 
     def obtener_datos(self, f):
@@ -186,11 +222,12 @@ class ReporteVacunasPendientes(Reporte):
         return [f"Mascotas con esquema incompleto: {mascotas} — dosis pendientes: {len(filas)}",
                 "Por vacuna: " + (", ".join(f"{v}: {n}" for v, n in por_vacuna.items()) or "-")]
 
-    def datos_grafico(self, filas):
-        por_vacuna = defaultdict(int)
+    def datos_grafico(self, filas, f):
+        por_vacuna = {}
         for x in filas:
-            por_vacuna[x["vacuna"]] += 1
-        return [{"vacuna": v, "cantidad": n} for v, n in por_vacuna.items()]
+            g = por_vacuna.setdefault(x["vacuna"], {"vacuna": x["vacuna"], PENDIENTE: 0, VENCIDA: 0})
+            g[x["estado"]] += 1
+        return list(por_vacuna.values())
 
 
 class ReporteFacturacion(Reporte):
@@ -199,7 +236,8 @@ class ReporteFacturacion(Reporte):
     columnas = [("clinica", "Clínica"), ("comprobantes", "Comprobantes"), ("consulta", "Consultas $"),
                 ("vacuna", "Vacunas $"), ("laboratorio", "Laboratorio $"), ("total", "Total $"),
                 ("pct", "% del total"), ("ticket_promedio", "Ticket promedio $")]
-    grafico = ("clinica", "total")
+    grafico = Grafico("etiqueta", (("consulta", "Consultas"), ("vacuna", "Vacunas"), ("laboratorio", "Laboratorio")),
+                      "Facturación por clínica y servicio", unidad="$")
 
     def obtener_datos(self, f):
         return self.bd.consultar("""
@@ -219,6 +257,7 @@ class ReporteFacturacion(Reporte):
         for x in filas:
             x["pct"] = porcentaje(x["total"], total_general)
             x["ticket_promedio"] = round(x["total"] / x["comprobantes"], 2)
+            x["etiqueta"] = _corto(x["clinica"])
         return filas
 
     def resumir(self, filas, f):
@@ -236,7 +275,9 @@ class ReporteTiemposMuestras(Reporte):
                 ("analizadas", "Analizadas"),
                 ("h_espera", "Espera en clínica (h)"), ("h_transito", "Tránsito (h)"),
                 ("h_proceso", "Procesamiento (h)"), ("h_total", "Total extracción→resultado (h)")]
-    grafico = ("etiqueta", "h_transito")
+    grafico = Grafico("etiqueta", (("h_espera", "Espera en clínica"), ("h_transito", "Tránsito"),
+                                   ("h_proceso", "Procesamiento")),
+                      "Horas promedio por etapa, de la extracción al resultado", unidad="h")
 
     def obtener_datos(self, f):
         # Se pivotea la bitácora de estados: un instante por cada hito del ciclo de vida
@@ -269,7 +310,7 @@ class ReporteTiemposMuestras(Reporte):
 
     def procesar(self, filas, f):
         for x in filas:
-            x["etiqueta"] = f"{x['clinica'].replace('Clínica ', '')} · {x['analisis']}"
+            x["etiqueta"] = f"{_corto(x['clinica'])} · {x['analisis']}"
         return filas
 
     def resumir(self, filas, f):
@@ -292,5 +333,14 @@ class ReporteTiemposMuestras(Reporte):
                 f"Ruta con mayor tránsito: {lenta['clinica']} ({numero(lenta['h_transito'], 1)} h promedio)"]
 
 
-REPORTES = [ReporteAtencionesDerivaciones, ReporteMuestrasRechazadas, ReporteTratamientos,
-            ReporteVacunasPendientes, ReporteFacturacion, ReporteTiemposMuestras]
+# Agrupación de los reportes por tema: (nombre, ícono de Bootstrap Icons, color, descripción, reportes)
+CATEGORIAS = [
+    ("Clínicas", "hospital", "primary", "Actividad de cada clínica de la red", [ReporteAtencionesDerivaciones]),
+    ("Mascotas", "heart-pulse", "danger", "Salud y vacunación de los pacientes",
+     [ReporteTratamientos, ReporteVacunasPendientes]),
+    ("Análisis", "eyedropper", "info", "Muestras, transporte y laboratorio",
+     [ReporteMuestrasRechazadas, ReporteTiemposMuestras]),
+    ("Facturación", "cash-coin", "success", "Ingresos por clínica y servicio", [ReporteFacturacion]),
+]
+
+REPORTES = [reporte for *_, reportes in CATEGORIAS for reporte in reportes]
